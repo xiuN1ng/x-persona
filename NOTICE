@@ -1,0 +1,22 @@
+# Notices & Attributions
+
+This project includes and builds upon the following open-source works and psychometric resources:
+
+1. **Open Extended Jungian Type Scales (OEJTS 1.2)**
+   - Developed by OpenPsychometrics.org
+   - Licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+   - Source: https://openpsychometrics.org/tests/OEJTS/
+   - Note: This project is an independent implementation and is not affiliated with, endorsed by, or associated with the Myers & Briggs Foundation or the Myers-Briggs Type Indicator (MBTI®).
+
+2. **FxTwitter / FixTweet API**
+   - API endpoints provided by https://api.fxtwitter.com
+   - Open source project: https://github.com/FixTweet/FxTwitter
+   - Licensed under the MIT License.
+
+3. **Segmentit**
+   - Chinese word segmentation for browsers and Node.js
+   - Open source project: https://github.com/linyang95/segmentit
+   - Licensed under the MIT License.
+
+4. **Disclaimer**
+   - This tool is created for educational, reflective, and entertainment purposes only. It is not a clinical psychological assessment, diagnostic tool, or medical instrument.
