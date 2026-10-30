@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import type { AxisScores } from '../../persona/axes'
 import type { AvatarVisualFeatures } from '../../providers/types'
 
@@ -29,6 +29,65 @@ function parseHexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255
+  g /= 255
+  b /= 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  let h = 0
+  let s = 0
+  const l = (max + min) / 2
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0)
+        break
+      case g:
+        h = (b - r) / d + 2
+        break
+      case b:
+        h = (r - g) / d + 4
+        break
+    }
+    h /= 6
+  }
+  return [h * 360, s * 100, l * 100]
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const hNorm = ((h % 360) + 360) % 360
+  const sNorm = Math.max(0, Math.min(100, s)) / 100
+  const lNorm = Math.max(0, Math.min(100, l)) / 100
+  const c = (1 - Math.abs(2 * lNorm - 1)) * sNorm
+  const x = c * (1 - Math.abs(((hNorm / 60) % 2) - 1))
+  const m = lNorm - c / 2
+  let r = 0
+  let g = 0
+  let b = 0
+  if (hNorm < 60) [r, g, b] = [c, x, 0]
+  else if (hNorm < 120) [r, g, b] = [x, c, 0]
+  else if (hNorm < 180) [r, g, b] = [0, c, x]
+  else if (hNorm < 240) [r, g, b] = [0, x, c]
+  else if (hNorm < 300) [r, g, b] = [x, 0, c]
+  else [r, g, b] = [c, 0, x]
+  const toByte = (v: number) => Math.round((v + m) * 255).toString(16).padStart(2, '0')
+  return `#${toByte(r)}${toByte(g)}${toByte(b)}`
+}
+
+/**
+ * Bounded Hue & Saturation Perturbation within Aesthetic Safe Zone (±20° max hue shift)
+ * Guarantees every user's card is uniquely tinted while never producing ugly/muddy colors.
+ */
+export function perturbHexBounded(hex: string, hueDeltaDeg: number, satDeltaPct = 0, lightDeltaPct = 0): string {
+  const [r, g, b] = parseHexToRgb(hex)
+  const [h, s, l] = rgbToHsl(r, g, b)
+  const clampedHueDelta = Math.max(-20, Math.min(20, hueDeltaDeg))
+  return hslToHex(h + clampedHueDelta, s + satDeltaPct, l + lightDeltaPct)
+}
+
 export function blendHexColors(hexA: string, hexB: string, weightB: number): string {
   const wB = Math.max(0, Math.min(1, weightB))
   const wA = 1 - wB
@@ -39,6 +98,63 @@ export function blendHexColors(hexA: string, hexB: string, weightB: number): str
   const b = Math.round(b1 * wA + b2 * wB)
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
+
+/**
+ * Deterministic Seeded 2D Value-Gradient Noise for fxhash-style Curl Flow Fields
+ */
+function createSeededNoise2D(seed: number) {
+  const rng = createRng(seed)
+  const perm = new Uint8Array(512)
+  const gradX = new Float32Array(256)
+  const gradY = new Float32Array(256)
+  for (let i = 0; i < 256; i++) {
+    perm[i] = i
+    const angle = rng() * Math.PI * 2
+    gradX[i] = Math.cos(angle)
+    gradY[i] = Math.sin(angle)
+  }
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    const tmp = perm[i]
+    perm[i] = perm[j]
+    perm[j] = tmp
+  }
+  for (let i = 0; i < 256; i++) {
+    perm[i + 256] = perm[i]
+  }
+
+  const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10)
+  const lerp = (a: number, b: number, t: number) => a + t * (b - a)
+
+  return function noise2D(x: number, y: number): number {
+    const X = Math.floor(x) & 255
+    const Y = Math.floor(y) & 255
+    const xf = x - Math.floor(x)
+    const yf = y - Math.floor(y)
+    const u = fade(xf)
+    const v = fade(yf)
+
+    const aa = perm[perm[X] + Y]
+    const ab = perm[perm[X] + Y + 1]
+    const ba = perm[perm[X + 1] + Y]
+    const bb = perm[perm[X + 1] + Y + 1]
+
+    const dotAA = gradX[aa] * xf + gradY[aa] * yf
+    const dotBA = gradX[ba] * (xf - 1) + gradY[ba] * yf
+    const dotAB = gradX[ab] * xf + gradY[ab] * (yf - 1)
+    const dotBB = gradX[bb] * (xf - 1) + gradY[bb] * (yf - 1)
+
+    return lerp(lerp(dotAA, dotBA, u), lerp(dotAB, dotBB, u), v)
+  }
+}
+
+export type FlowTextureFamily =
+  | 'laminar-grid'          // BEAK / Structured Columnist: crisp meridian grid + parallel laminar ribbons
+  | 'neural-constellation'  // CEFD / Empathetic Conversationalist: multi-node network + warm turbulent curl flow
+  | 'vortex-spiral'         // Deep Philosopher / Mystic: logarithmic harmonic spiral + interference waves
+  | 'quantum-pulse'         // Kinetic / Shitposter / Hacker: high-frequency radial pulse + electric streamlines
+
+export type CardRarityTier = 'common' | 'holo' | 'prismatic' | 'rainbow'
 
 export interface GenerativeDNA {
   seed: number;
@@ -55,6 +171,19 @@ export interface GenerativeDNA {
   mutedTextColor: string;
   borderColor: string;
 
+  // fxhash 3-Layer Parametric Generative Fields
+  flowFamily: FlowTextureFamily;
+  flowFrequency: number;       // 0.004 .. 0.016
+  flowTurbulence: number;      // 0.25 .. 1.85
+  flowLineCount: number;       // 36 .. 78
+  networkNodeCount: number;    // 0 .. 22 (driven by Field C vs B)
+  gridDensity: number;         // 4 .. 14 (driven by Rhythm K vs D)
+  particleCount: number;       // 12 .. 48
+  peakHour: number;            // 0 .. 23 (dominant circadian hour)
+  rarityTier: CardRarityTier;
+  rarityLabel: string;
+  rarityScore: number;         // 0 .. 100
+
   // Silent internal avatar weight (30%)
   avatarWeightPercent: number;
   avatarSwatches: string[];
@@ -68,9 +197,9 @@ export interface GenerativeDNA {
   innerPetalReach: number;    // 0.38 .. 0.68
   innerPetalSpread: number;   // 0.15 .. 0.45
   orbitRadii: [number, number, number, number];
-  orbitAngles: [number, number, number, number]; // Planetary node angles in degrees
+  orbitAngles: [number, number, number, number];
   rayCount: number;           // 16 .. 36
-  rayModulation: number;      // Harmonic modulation depth
+  rayModulation: number;
   ringStyle: 'astrolabe' | 'solstice' | 'chronos' | 'alchemical';
 
   // Kept for unit test compatibility
@@ -88,6 +217,58 @@ export interface GenerativeDNA {
   topologyMode: 'chladni' | 'flowfield' | 'constellation' | 'vortex';
 }
 
+interface ArchetypeVisualSpec {
+  worldIdx: number;
+  flowFamily: FlowTextureFamily;
+  hueBias: number; // Base hue offset in [-12, +12]
+}
+
+/**
+ * 16 Archetype Base Visual Specs (Hand-tuned Aesthetic Safe Zones + Native Texture Families)
+ * e.g. BEAK = Cool Structured Grid & Laminar Ribbons; CEFD = Warm Multi-Node Network & Turbulent Flow
+ */
+const ARCHETYPE_SPECS: Record<string, ArchetypeVisualSpec> = {
+  // Broadcast + Essay (Deep Thinkers / Columnists)
+  BEAK: { worldIdx: 2, flowFamily: 'laminar-grid', hueBias: -6 },
+  BEAD: { worldIdx: 0, flowFamily: 'vortex-spiral', hueBias: 4 },
+  BEFK: { worldIdx: 1, flowFamily: 'laminar-grid', hueBias: 0 },
+  BEFD: { worldIdx: 6, flowFamily: 'vortex-spiral', hueBias: 8 },
+  // Broadcast + Spark (Broadcasters / Shitposters / Pulse)
+  BSAK: { worldIdx: 3, flowFamily: 'laminar-grid', hueBias: -4 },
+  BSAD: { worldIdx: 7, flowFamily: 'quantum-pulse', hueBias: 6 },
+  BSFK: { worldIdx: 5, flowFamily: 'quantum-pulse', hueBias: -5 },
+  BSFD: { worldIdx: 4, flowFamily: 'quantum-pulse', hueBias: 10 },
+  // Conversation + Essay (Debaters / Mentors / Salon Hosts)
+  CEAK: { worldIdx: 2, flowFamily: 'laminar-grid', hueBias: 6 },
+  CEAD: { worldIdx: 7, flowFamily: 'neural-constellation', hueBias: -8 },
+  CEFK: { worldIdx: 3, flowFamily: 'neural-constellation', hueBias: 5 },
+  CEFD: { worldIdx: 4, flowFamily: 'neural-constellation', hueBias: -4 },
+  // Conversation + Spark (Vibers / Connectors / Night Owls)
+  CSAK: { worldIdx: 1, flowFamily: 'neural-constellation', hueBias: 4 },
+  CSAD: { worldIdx: 0, flowFamily: 'quantum-pulse', hueBias: -8 },
+  CSFK: { worldIdx: 5, flowFamily: 'neural-constellation', hueBias: 6 },
+  CSFD: { worldIdx: 6, flowFamily: 'neural-constellation', hueBias: -6 },
+}
+
+const MBTI_SPECS: Record<string, ArchetypeVisualSpec> = {
+  INTJ: { worldIdx: 0, flowFamily: 'laminar-grid', hueBias: -4 },
+  INTP: { worldIdx: 2, flowFamily: 'vortex-spiral', hueBias: 6 },
+  ENTJ: { worldIdx: 0, flowFamily: 'laminar-grid', hueBias: 8 },
+  ENTP: { worldIdx: 7, flowFamily: 'quantum-pulse', hueBias: -6 },
+  INFJ: { worldIdx: 6, flowFamily: 'vortex-spiral', hueBias: -5 },
+  INFP: { worldIdx: 5, flowFamily: 'vortex-spiral', hueBias: 6 },
+  ENFJ: { worldIdx: 4, flowFamily: 'neural-constellation', hueBias: -4 },
+  ENFP: { worldIdx: 4, flowFamily: 'neural-constellation', hueBias: 10 },
+  ISTJ: { worldIdx: 2, flowFamily: 'laminar-grid', hueBias: 0 },
+  ISFJ: { worldIdx: 3, flowFamily: 'laminar-grid', hueBias: 4 },
+  ESTJ: { worldIdx: 1, flowFamily: 'laminar-grid', hueBias: -4 },
+  ESFJ: { worldIdx: 5, flowFamily: 'neural-constellation', hueBias: 4 },
+  ISTP: { worldIdx: 7, flowFamily: 'quantum-pulse', hueBias: -8 },
+  ISFP: { worldIdx: 3, flowFamily: 'vortex-spiral', hueBias: 8 },
+  ESTP: { worldIdx: 4, flowFamily: 'quantum-pulse', hueBias: -8 },
+  ESFP: { worldIdx: 6, flowFamily: 'neural-constellation', hueBias: 8 },
+}
+
 interface LuxuryColorWorld {
   name: string;
   isLight: boolean;
@@ -102,10 +283,6 @@ interface LuxuryColorWorld {
   muted: string;
 }
 
-/**
- * Curated High-Fashion / Collector-Grade Palettes
- * Inspired by Theory11 foil playing cards, Clow/Tarot cards, and luxury watch dials.
- */
 const LUXURY_WORLDS: LuxuryColorWorld[] = [
   // 0: 曜石鎏金 (Obsidian & Champagne Gold)
   {
@@ -113,7 +290,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: false,
     bgBase: '#0b0c10',
     bgSecondary: '#141722',
-    surfaceBg: 'rgba(18, 21, 32, 0.88)',
+    surfaceBg: 'rgba(18, 21, 32, 0.86)',
     primary: '#e5c158',
     secondary: '#c59b27',
     tertiary: '#f7e5a9',
@@ -127,7 +304,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: true,
     bgBase: '#fbf9f5',
     bgSecondary: '#f2ece1',
-    surfaceBg: 'rgba(255, 253, 249, 0.92)',
+    surfaceBg: 'rgba(255, 253, 249, 0.90)',
     primary: '#b48327',
     secondary: '#8c5a16',
     tertiary: '#d4a338',
@@ -141,7 +318,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: false,
     bgBase: '#080d1a',
     bgSecondary: '#101c35',
-    surfaceBg: 'rgba(13, 23, 44, 0.88)',
+    surfaceBg: 'rgba(13, 23, 44, 0.86)',
     primary: '#7dd3fc',
     secondary: '#38bdf8',
     tertiary: '#e0f2fe',
@@ -155,7 +332,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: true,
     bgBase: '#f4f9f6',
     bgSecondary: '#e3f1ea',
-    surfaceBg: 'rgba(249, 253, 251, 0.92)',
+    surfaceBg: 'rgba(249, 253, 251, 0.90)',
     primary: '#0f766e',
     secondary: '#b48327',
     tertiary: '#14b8a6',
@@ -169,7 +346,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: false,
     bgBase: '#14080e',
     bgSecondary: '#28101c',
-    surfaceBg: 'rgba(32, 13, 23, 0.88)',
+    surfaceBg: 'rgba(32, 13, 23, 0.86)',
     primary: '#fda4af',
     secondary: '#f43f5e',
     tertiary: '#fecdd3',
@@ -183,7 +360,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: true,
     bgBase: '#faf8ff',
     bgSecondary: '#efeafd',
-    surfaceBg: 'rgba(253, 252, 255, 0.92)',
+    surfaceBg: 'rgba(253, 252, 255, 0.90)',
     primary: '#6d28d9',
     secondary: '#b48327',
     tertiary: '#8b5cf6',
@@ -197,7 +374,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: false,
     bgBase: '#0d0818',
     bgSecondary: '#1b1132',
-    surfaceBg: 'rgba(22, 14, 40, 0.88)',
+    surfaceBg: 'rgba(22, 14, 40, 0.86)',
     primary: '#d8b4fe',
     secondary: '#eab308',
     tertiary: '#f3e8ff',
@@ -211,7 +388,7 @@ const LUXURY_WORLDS: LuxuryColorWorld[] = [
     isLight: false,
     bgBase: '#06120e',
     bgSecondary: '#0d261e',
-    surfaceBg: 'rgba(10, 30, 24, 0.88)',
+    surfaceBg: 'rgba(10, 30, 24, 0.86)',
     primary: '#6ee7b7',
     secondary: '#d97706',
     tertiary: '#a7f3d0',
@@ -226,9 +403,14 @@ export interface ExtraGenerativeMetrics {
   burstiness?: number;
   avgChars?: number;
   consistency?: number;
+  hourlyDistribution?: number[];
   avatarFeatures?: AvatarVisualFeatures;
 }
 
+/**
+ * Pure fxhash-style parameter derivation function:
+ * Maps (handle + 4D axes + circadian histogram + avatar visual DNA) -> deterministic GenerativeDNA
+ */
 export function computeGenerativeDNA(
   variant: 'outer' | 'inner' | 'fusion',
   code: string,
@@ -236,7 +418,9 @@ export function computeGenerativeDNA(
   handle: string,
   extraMetrics?: ExtraGenerativeMetrics | number[]
 ): GenerativeDNA {
-  const extra: ExtraGenerativeMetrics = Array.isArray(extraMetrics) ? {} : extraMetrics || {}
+  const extra: ExtraGenerativeMetrics = Array.isArray(extraMetrics)
+    ? { hourlyDistribution: extraMetrics }
+    : extraMetrics || {}
   const avatar = extra.avatarFeatures
 
   // 70% Persona + 30% Avatar Visual DNA (silently blended under the hood)
@@ -255,55 +439,119 @@ export function computeGenerativeDNA(
   const wDensity = avatar ? axes.density * PERSONA_W + avatar.detailDensity * AVATAR_W : axes.density
   const wTemp = avatar ? axes.temperature * PERSONA_W + avatar.warmth * AVATAR_W : axes.temperature
   const wRhythm = avatar ? axes.rhythm * PERSONA_W + avatar.saturation * AVATAR_W : axes.rhythm
-  const avatarLum = avatar ? avatar.luminance : 52
 
-  // Select Luxury Color World
-  let worldIdx = 0
-  if (variant === 'fusion') {
-    const c = extra.consistency ?? 75
-    worldIdx = c >= 75 ? 0 : c >= 55 ? 6 : 4
-  } else if (variant === 'inner') {
-    if (code.includes('NF')) worldIdx = avatarLum >= 48 ? 5 : 6
-    else if (code.includes('NT')) worldIdx = avatarLum >= 52 ? 1 : 2
-    else if (code.includes('SJ')) worldIdx = 3
-    else worldIdx = avatarLum >= 50 ? 1 : 7
-  } else {
-    const nightOwl = extra.nightOwl ?? 15
-    const darkAffinity = nightOwl * 2.0 * PERSONA_W + (100 - avatarLum) * AVATAR_W
-    if (darkAffinity >= 48) {
-      const darkPool = [0, 2, 4, 6, 7]
-      const hOff = avatar ? Math.floor(avatar.dominantHue / 72) : 0
-      worldIdx = darkPool[(Math.round(wField + wTemp) + hOff + (seed % 7)) % darkPool.length]
-    } else {
-      const lightPool = [1, 3, 5, 0, 2]
-      const hOff = avatar ? Math.floor(avatar.dominantHue / 72) : 0
-      worldIdx = lightPool[(Math.round(wDensity + wRhythm) + hOff + (seed % 5)) % lightPool.length]
-    }
-  }
+  // Look up Archetype Base Spec (16 outer codes + 16 inner MBTI codes)
+  const cleanCode = code.slice(0, 4).toUpperCase()
+  const baseSpec: ArchetypeVisualSpec =
+    variant === 'inner'
+      ? MBTI_SPECS[cleanCode] || { worldIdx: 5, flowFamily: 'vortex-spiral', hueBias: 0 }
+      : variant === 'fusion'
+      ? {
+          worldIdx: (extra.consistency ?? 75) >= 75 ? 0 : 6,
+          flowFamily: wField >= 50 ? 'neural-constellation' : 'vortex-spiral',
+          hueBias: 0,
+        }
+      : ARCHETYPE_SPECS[cleanCode] || {
+          worldIdx: seed % LUXURY_WORLDS.length,
+          flowFamily: wField >= 50 ? 'neural-constellation' : 'laminar-grid',
+          hueBias: 0,
+        }
 
-  const world = LUXURY_WORLDS[worldIdx] || LUXURY_WORLDS[0]
+  const world = LUXURY_WORLDS[baseSpec.worldIdx] || LUXURY_WORLDS[0]
 
-  // Subtle harmonic infusion of avatar's hue (25% blend so palette stays cohesive and high-fashion)
+  // Bounded Perturbation within ±20° Aesthetic Safe Zone:
+  // Combines archetype hueBias + personal 4D score perturbation + avatar hue harmony
+  const personalHueDelta =
+    baseSpec.hueBias + ((wTemp - 50) / 50) * 10 + ((wField - 50) / 50) * 6
+  const satDelta = ((wTemp - 50) / 50) * 8
+
+  const perturbedPrimary = perturbHexBounded(world.primary, personalHueDelta, satDelta, 0)
+  const perturbedSecondary = perturbHexBounded(world.secondary, -personalHueDelta * 0.7, satDelta, 0)
+  const perturbedTertiary = perturbHexBounded(world.tertiary, personalHueDelta * 0.5, satDelta * 0.5, 0)
+
+  // Silent 22% harmonic blend with avatar's extracted palette
   const primaryColor = avatar
-    ? blendHexColors(world.primary, avatar.dominantColorHex, 0.25)
-    : world.primary
+    ? blendHexColors(perturbedPrimary, avatar.dominantColorHex, 0.22)
+    : perturbedPrimary
   const secondaryColor = avatar
-    ? blendHexColors(world.secondary, avatar.secondaryColorHex, 0.25)
-    : world.secondary
+    ? blendHexColors(perturbedSecondary, avatar.secondaryColorHex, 0.22)
+    : perturbedSecondary
   const tertiaryColor = avatar
-    ? blendHexColors(world.tertiary, avatar.accentColorHex, 0.28)
-    : world.tertiary
+    ? blendHexColors(perturbedTertiary, avatar.accentColorHex, 0.24)
+    : perturbedTertiary
 
   const [pr, pg, pb] = parseHexToRgb(primaryColor)
   const borderColor = `rgba(${pr}, ${pg}, ${pb}, ${world.isLight ? 0.42 : 0.52})`
 
-  // Sacred Geometry Parameters (guaranteed symmetrical, smooth, and unique per user)
+  // Layer 1 Flow Field Parameters (directly driven by 4D axes)
+  // Temperature (A->F) drives curl turbulence; Density (E->S) drives spatial frequency;
+  // Field (B->C) drives social network node count; Rhythm (K->D) drives grid regularity vs particle scatter
+  const flowFrequency = 0.005 + (wDensity / 100) * 0.009
+  const flowTurbulence = 0.28 + (wTemp / 100) * 1.45
+  const flowLineCount = Math.round(42 + ((100 - wDensity) / 100) * 32)
+  const networkNodeCount = wField >= 45 ? Math.round(8 + (wField / 100) * 14) : Math.round((wField / 100) * 6)
+  const gridDensity = wRhythm < 55 ? Math.round(6 + ((100 - wRhythm) / 100) * 8) : 4
+  const particleCount = Math.round(14 + (wRhythm / 100) * 28)
+
+  // Dominant circadian peak hour (0..23)
+  let peakHour = (seed % 24)
+  if (extra.hourlyDistribution && extra.hourlyDistribution.length === 24) {
+    let bestH = 0
+    let bestV = -1
+    for (let h = 0; h < 24; h++) {
+      if (extra.hourlyDistribution[h] > bestV) {
+        bestV = extra.hourlyDistribution[h]
+        bestH = h
+      }
+    }
+    peakHour = bestH
+  }
+
+  // Layer 3 Multi-Dimensional Rarity Calculation (Independent of Follower Count!)
+  // Driven by circadian rarity (night owl), burstiness Fano factor, craft depth (avgChars), and extreme axis conviction
+  const nightOwlBonus = Math.min(28, (extra.nightOwl ?? 0.12) * 110)
+  const burstBonus = Math.min(25, Math.log10(Math.max(1, extra.burstiness ?? 10)) * 8)
+  const craftBonus = Math.min(22, ((extra.avgChars ?? 80) / 180) * 20)
+  const convictionBonus =
+    (Math.abs(axes.field - 50) +
+      Math.abs(axes.density - 50) +
+      Math.abs(axes.temperature - 50) +
+      Math.abs(axes.rhythm - 50)) /
+    8
+  const rawRarityScore = Math.min(
+    99,
+    Math.round(
+      (variant === 'fusion' ? 88 : 25) +
+        nightOwlBonus +
+        burstBonus +
+        craftBonus +
+        convictionBonus
+    )
+  )
+
+  const rarityTier: CardRarityTier =
+    variant === 'fusion' || rawRarityScore >= 82
+      ? 'rainbow'
+      : rawRarityScore >= 66
+      ? 'prismatic'
+      : rawRarityScore >= 48
+      ? 'holo'
+      : 'common'
+
+  const rarityLabel =
+    rarityTier === 'rainbow'
+      ? '✦ SECRET RAINBOW'
+      : rarityTier === 'prismatic'
+      ? '◆ PRISMATIC FOIL'
+      : rarityTier === 'holo'
+      ? '◇ HOLO FOIL'
+      : '○ COLLECTOR EDITION'
+
+  // Sacred Geometry Parameters
   const symmetryChoices = [6, 8, 10, 12, 14, 16]
   const symIdx =
     (Math.round(wField / 12) + Math.round(wRhythm / 14) + (seed % 6)) % symmetryChoices.length
   const symmetryOrder = symmetryChoices[symIdx]
-
-  // Star polygram step k such that {N/k} creates a sharp geometric star
   const starStep = symmetryOrder >= 12 ? 5 : symmetryOrder >= 8 ? 3 : 2
 
   const outerPetalReach = 0.72 + (wRhythm / 100) * 0.24
@@ -354,6 +602,17 @@ export function computeGenerativeDNA(
     textColor: world.text,
     mutedTextColor: world.muted,
     borderColor,
+    flowFamily: baseSpec.flowFamily,
+    flowFrequency,
+    flowTurbulence,
+    flowLineCount,
+    networkNodeCount,
+    gridDensity,
+    particleCount,
+    peakHour,
+    rarityTier,
+    rarityLabel,
+    rarityScore: rawRarityScore,
     avatarWeightPercent: 30,
     avatarSwatches: avatar?.paletteSwatches || [primaryColor, secondaryColor, tertiaryColor],
     avatarDominantHue: avatar?.dominantHue ?? (seed % 360),
@@ -377,9 +636,14 @@ export function computeGenerativeDNA(
     hypotrochoidd,
     lissajousKx: 3,
     lissajousKy: 4,
-    turbulence: 0.5 + (wRhythm / 100) * 1.5,
+    turbulence: flowTurbulence,
     frameStyle: variant === 'fusion' ? 'alchemical-seal' : variant === 'inner' ? 'tarot-arch' : 'celestial',
-    topologyMode: 'chladni',
+    topologyMode:
+      baseSpec.flowFamily === 'neural-constellation'
+        ? 'constellation'
+        : baseSpec.flowFamily === 'vortex-spiral'
+        ? 'vortex'
+        : 'flowfield',
   }
 }
 
@@ -449,7 +713,9 @@ function buildStarPolygramPoints(
 }
 
 /**
- * Subtle Luxury Background Texture & Ambient Glow (Front Face)
+ * LAYER 1 (BOTTOM): fxhash-Style Seeded Generative Flow Field & Archetype Texture Canvas
+ * Renders silk-smooth anti-aliased flow lines, structured architectural grids (for BEAK/K types),
+ * or multi-node social constellations (for CEFD/C types) onto a 2x Retina Canvas 2D.
  */
 export const ProceduralPatternCanvas: React.FC<{
   dna: GenerativeDNA;
@@ -457,42 +723,180 @@ export const ProceduralPatternCanvas: React.FC<{
   isBack?: boolean;
   hourlyDistribution?: number[];
 }> = ({ dna, isBack = false }) => {
-  const uid = `bg-${dna.seed}-${isBack ? 'b' : 'f'}`
-  return (
-    <svg
-      viewBox="0 0 380 575"
-      className="absolute inset-0 w-full h-full pointer-events-none"
-      preserveAspectRatio="none"
-    >
-      <defs>
-        <linearGradient id={`${uid}-base`} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor={dna.bgBase} />
-          <stop offset="50%" stopColor={dna.bgSecondary} />
-          <stop offset="100%" stopColor={dna.bgBase} />
-        </linearGradient>
-        <radialGradient id={`${uid}-glow`} cx="50%" cy={isBack ? '50%' : '32%'} r="62%">
-          <stop
-            offset="0%"
-            stopColor={dna.primaryColor}
-            stopOpacity={dna.isLightTheme ? '0.18' : '0.24'}
-          />
-          <stop
-            offset="55%"
-            stopColor={dna.secondaryColor}
-            stopOpacity={dna.isLightTheme ? '0.06' : '0.1'}
-          />
-          <stop offset="100%" stopColor={dna.bgBase} stopOpacity="0" />
-        </radialGradient>
-      </defs>
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
-      <rect width="380" height="575" fill={`url(#${uid}-base)`} />
-      <rect width="380" height="575" fill={`url(#${uid}-glow)`} />
-    </svg>
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const W = 380
+    const H = 575
+    const dpr = 2
+    canvas.width = W * dpr
+    canvas.height = H * dpr
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
+    const rng = createRng(dna.seed ^ (isBack ? 0x9e3779b9 : 0x13579bdf))
+    const noise2D = createSeededNoise2D(dna.seed ^ (isBack ? 0x85ebca6b : 0xc2b2ae35))
+
+    // 1. Rich Base Gradient
+    const baseGrad = ctx.createLinearGradient(0, 0, W, H)
+    baseGrad.addColorStop(0, dna.bgBase)
+    baseGrad.addColorStop(0.5, dna.bgSecondary)
+    baseGrad.addColorStop(1, dna.bgBase)
+    ctx.fillStyle = baseGrad
+    ctx.fillRect(0, 0, W, H)
+
+    // 2. Ambient Radial Aura
+    const glowY = isBack ? H * 0.5 : H * 0.31
+    const radGrad = ctx.createRadialGradient(W * 0.5, glowY, 10, W * 0.5, glowY, 260)
+    const [pr, pg, pb] = parseHexToRgb(dna.primaryColor)
+    const [sr, sg, sb] = parseHexToRgb(dna.secondaryColor)
+    const [tr, tg, tb] = parseHexToRgb(dna.tertiaryColor)
+    radGrad.addColorStop(0, `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.16 : 0.22})`)
+    radGrad.addColorStop(0.55, `rgba(${sr}, ${sg}, ${sb}, ${dna.isLightTheme ? 0.06 : 0.09})`)
+    radGrad.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = radGrad
+    ctx.fillRect(0, 0, W, H)
+
+    // 3. Archetype-Specific Structural Underlay
+    if (dna.flowFamily === 'laminar-grid') {
+      // BEAK / Structured Columnist: crisp architectural meridian grid & rule lines
+      ctx.strokeStyle = `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.08 : 0.09})`
+      ctx.lineWidth = 0.6
+      const step = Math.round(W / dna.gridDensity)
+      for (let x = step; x < W; x += step) {
+        ctx.beginPath()
+        ctx.moveTo(x, 18)
+        ctx.lineTo(x, H - 18)
+        ctx.stroke()
+      }
+      for (let y = step; y < H; y += step) {
+        ctx.beginPath()
+        ctx.moveTo(18, y)
+        ctx.lineTo(W - 18, y)
+        ctx.stroke()
+      }
+    }
+
+    // 4. Seeded Curl-Noise Silk Streamlines (Differentiated by FlowFamily)
+    const lineCount = isBack ? Math.round(dna.flowLineCount * 0.7) : dna.flowLineCount
+    const freq = dna.flowFrequency
+    const turb = dna.flowTurbulence
+
+    for (let i = 0; i < lineCount; i++) {
+      let x = rng() * W
+      let y = rng() * H
+      const steps = 42 + Math.floor(rng() * 34)
+      const stepLen = 3.8
+
+      ctx.beginPath()
+      ctx.moveTo(x, y)
+
+      for (let s = 0; s < steps; s++) {
+        let angle = 0
+        if (dna.flowFamily === 'laminar-grid') {
+          // Smooth horizontal/diagonal laminar ribbons with gentle harmonic undulation
+          const n = noise2D(x * freq * 0.7, y * freq * 0.7)
+          angle = Math.PI * 0.18 + n * turb * 0.55
+        } else if (dna.flowFamily === 'vortex-spiral') {
+          // Orbital spiral streamlines around the mandala center
+          const dx = x - W * 0.5
+          const dy = y - glowY
+          const baseAngle = Math.atan2(dy, dx) + Math.PI * 0.52
+          const n = noise2D(x * freq, y * freq)
+          angle = baseAngle + n * turb * 0.45
+        } else if (dna.flowFamily === 'quantum-pulse') {
+          // High-energy frequency-modulated wave streamlines
+          const n = noise2D(x * freq * 1.35, y * freq * 1.35)
+          angle = Math.sin(y * 0.025) * 1.1 + n * turb * 1.25
+        } else {
+          // 'neural-constellation': Organic curl-noise turbulent flow field
+          const n = noise2D(x * freq, y * freq)
+          angle = n * Math.PI * turb * 1.4
+        }
+
+        x += Math.cos(angle) * stepLen
+        y += Math.sin(angle) * stepLen
+        ctx.lineTo(x, y)
+
+        if (x < -10 || x > W + 10 || y < -10 || y > H + 10) break
+      }
+
+      const useSecondary = i % 3 === 0
+      const alpha = dna.isLightTheme
+        ? 0.07 + (i % 5) * 0.015
+        : 0.08 + (i % 5) * 0.02
+      ctx.strokeStyle = useSecondary
+        ? `rgba(${sr}, ${sg}, ${sb}, ${alpha})`
+        : `rgba(${pr}, ${pg}, ${pb}, ${alpha})`
+      ctx.lineWidth = i % 6 === 0 ? 1.1 : 0.65
+      ctx.stroke()
+    }
+
+    // 5. Multi-Node Social Network Constellation (Prominent for 'C' Conversation types like CEFD)
+    if (dna.networkNodeCount > 0 && !isBack) {
+      const nodes: Array<{ x: number; y: number; r: number }> = []
+      for (let i = 0; i < dna.networkNodeCount; i++) {
+        nodes.push({
+          x: 28 + rng() * (W - 56),
+          y: 36 + rng() * (H - 72),
+          r: 1.2 + rng() * 1.8,
+        })
+      }
+
+      ctx.lineWidth = 0.6
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const dist = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y)
+          if (dist < 105) {
+            const linkAlpha = (1 - dist / 105) * (dna.isLightTheme ? 0.14 : 0.18)
+            ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, ${linkAlpha.toFixed(3)})`
+            ctx.beginPath()
+            ctx.moveTo(nodes[i].x, nodes[i].y)
+            ctx.lineTo(nodes[j].x, nodes[j].y)
+            ctx.stroke()
+          }
+        }
+      }
+
+      for (const nd of nodes) {
+        ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.25 : 0.35})`
+        ctx.beginPath()
+        ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
+    // 6. Luminous Stardust Particles (Driven by Rhythm / Spontaneous D)
+    const pCount = isBack ? Math.round(dna.particleCount * 0.5) : dna.particleCount
+    for (let i = 0; i < pCount; i++) {
+      const px = 20 + rng() * (W - 40)
+      const py = 20 + rng() * (H - 40)
+      const pradius = 0.6 + rng() * 1.3
+      const pAlpha = dna.isLightTheme ? 0.15 + rng() * 0.2 : 0.18 + rng() * 0.32
+      ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${pAlpha.toFixed(2)})`
+      ctx.beginPath()
+      ctx.arc(px, py, pradius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }, [dna, isBack])
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+    />
   )
 }
 
 /**
- * Front Centerpiece: Museum-Grade Parametric Sacred Rose & Planetary Astrolabe
+ * LAYER 2 (MIDDLE): Crisp Vector SVG Data Graphics + 24-Hour Circadian Ring Histogram
+ * Makes the user immediately recognize "This is MY data":
+ * - True 24-hour posting histogram around the outer ring (e.g. a 3 AM spike for late-night gamedevs, or 8 AM rise for morning columnists)
+ * - Parametric Sacred Rose Mandala + Planetary Axis Orbits + Avatar Medallion
  */
 export const ProceduralSigilCenterpiece: React.FC<{
   dna: GenerativeDNA;
@@ -501,17 +905,31 @@ export const ProceduralSigilCenterpiece: React.FC<{
   badgeIcon: string;
   secondaryIcon?: string;
   avatarUrl?: string;
-}> = ({ dna, badgeIcon, secondaryIcon, avatarUrl }) => {
+  hourlyDistribution?: number[];
+}> = ({ dna, badgeIcon, secondaryIcon, avatarUrl, hourlyDistribution }) => {
   const size = 196
   const cx = size / 2
   const cy = size / 2
-  const maxR = 88
+  const maxR = 86
+
+  // True 24-hour circadian distribution (00:00 at top, clockwise)
+  const rawHourly =
+    hourlyDistribution && hourlyDistribution.length === 24
+      ? hourlyDistribution
+      : Array.from({ length: 24 }, (_, hr) => {
+          const distFromPeak = Math.min(
+            Math.abs(hr - dna.peakHour),
+            24 - Math.abs(hr - dna.peakHour)
+          )
+          return Math.max(1, Math.round(12 - distFromPeak * 1.4 + ((hr * 7 + dna.seed) % 4)))
+        })
+  const maxHourVal = Math.max(...rawHourly, 1)
 
   const outerRosePath = buildSacredRosePath(
     cx,
     cy,
     22,
-    maxR * dna.outerPetalReach,
+    maxR * dna.outerPetalReach * 0.88,
     dna.symmetryOrder,
     dna.outerPetalSpread,
     0
@@ -520,16 +938,16 @@ export const ProceduralSigilCenterpiece: React.FC<{
     cx,
     cy,
     18,
-    maxR * dna.innerPetalReach,
+    maxR * dna.innerPetalReach * 0.9,
     dna.symmetryOrder,
     dna.innerPetalSpread,
     Math.PI / dna.symmetryOrder
   )
-  const starPts1 = buildStarPolygramPoints(cx, cy, maxR * 0.82, dna.symmetryOrder, dna.starStep, 0)
+  const starPts1 = buildStarPolygramPoints(cx, cy, maxR * 0.76, dna.symmetryOrder, dna.starStep, 0)
   const starPts2 = buildStarPolygramPoints(
     cx,
     cy,
-    maxR * 0.82,
+    maxR * 0.76,
     dna.symmetryOrder,
     dna.starStep,
     Math.PI / dna.symmetryOrder
@@ -549,44 +967,87 @@ export const ProceduralSigilCenterpiece: React.FC<{
           </radialGradient>
         </defs>
 
-        {/* Outer Fine Astrolabe Ring & Degree Ticks */}
+        {/* Outer Fine Astrolabe Ring */}
         <circle
           cx={cx}
           cy={cy}
-          r={maxR + 4}
+          r={maxR + 8}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.28"
-          strokeWidth="0.8"
+          strokeOpacity="0.24"
+          strokeWidth="0.75"
         />
         <circle
           cx={cx}
           cy={cy}
-          r={maxR}
+          r={maxR - 8}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.45"
-          strokeWidth="1"
+          strokeOpacity="0.42"
+          strokeWidth="0.9"
           strokeDasharray="2 3"
         />
 
-        {/* Symmetrical Radial Sunburst Rays */}
-        {Array.from({ length: dna.rayCount }).map((_, i) => {
-          const angle = (i / dna.rayCount) * Math.PI * 2 - Math.PI / 2
-          const isMajor = i % 2 === 0
-          const r1 = isMajor ? 28 : 44
-          const r2 = isMajor ? maxR + 2 : maxR - 10
+        {/* TRUE 24-HOUR CIRCADIAN RING HISTOGRAM (00:00 Top, 06:00 Right, 12:00 Bottom, 18:00 Left) */}
+        {rawHourly.map((val, hr) => {
+          const angle = (hr / 24) * Math.PI * 2 - Math.PI / 2
+          const norm = val / maxHourVal
+          const isPeak = hr === dna.peakHour && val > 0
+          const rBase = maxR - 8
+          const barLen = 3 + norm * 15 // Spikes outward up to maxR + 7
+          const x1 = cx + Math.cos(angle) * rBase
+          const y1 = cy + Math.sin(angle) * rBase
+          const x2 = cx + Math.cos(angle) * (rBase + barLen)
+          const y2 = cy + Math.sin(angle) * (rBase + barLen)
+
           return (
-            <line
-              key={i}
-              x1={cx + Math.cos(angle) * r1}
-              y1={cy + Math.sin(angle) * r1}
-              x2={cx + Math.cos(angle) * r2}
-              y2={cy + Math.sin(angle) * r2}
-              stroke={dna.primaryColor}
-              strokeOpacity={isMajor ? '0.32' : '0.16'}
-              strokeWidth={isMajor ? '0.9' : '0.6'}
-            />
+            <g key={hr}>
+              <line
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={isPeak ? dna.foilColor : dna.primaryColor}
+                strokeOpacity={isPeak ? '0.95' : (0.3 + norm * 0.55).toFixed(2)}
+                strokeWidth={isPeak ? '2.2' : norm > 0.6 ? '1.5' : '1.0'}
+                strokeLinecap="round"
+              />
+              {isPeak && (
+                <circle
+                  cx={cx + Math.cos(angle) * (rBase + barLen + 2.5)}
+                  cy={cy + Math.sin(angle) * (rBase + barLen + 2.5)}
+                  r="2"
+                  fill={dna.foilColor}
+                />
+              )}
+            </g>
+          )
+        })}
+
+        {/* 4 Cardinal Hour Markers (00h, 06h, 12h, 18h) */}
+        {[
+          { deg: -90, label: '00h' },
+          { deg: 0, label: '06h' },
+          { deg: 90, label: '12h' },
+          { deg: 180, label: '18h' },
+        ].map((m) => {
+          const rad = (m.deg * Math.PI) / 180
+          const tx = cx + Math.cos(rad) * (maxR + 13)
+          const ty = cy + Math.sin(rad) * (maxR + 13)
+          return (
+            <text
+              key={m.label}
+              x={tx}
+              y={ty + 2}
+              textAnchor="middle"
+              fill={dna.mutedTextColor}
+              fillOpacity="0.65"
+              fontFamily="monospace"
+              fontSize="6"
+              fontWeight="700"
+            >
+              {m.label}
+            </text>
           )
         })}
 
@@ -595,15 +1056,15 @@ export const ProceduralSigilCenterpiece: React.FC<{
           points={starPts1}
           fill="none"
           stroke={dna.secondaryColor}
-          strokeOpacity="0.4"
-          strokeWidth="0.9"
+          strokeOpacity="0.38"
+          strokeWidth="0.85"
         />
         <polygon
           points={starPts2}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.4"
-          strokeWidth="0.9"
+          strokeOpacity="0.38"
+          strokeWidth="0.85"
         />
 
         {/* Outer Parametric Lotus Petals */}
@@ -627,7 +1088,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
 
         {/* 4 Planetary Axis Orbits & Nodes */}
         {dna.orbitAngles.map((deg, idx) => {
-          const rad = 38 + idx * 13
+          const rad = 36 + idx * 11
           const a = (deg * Math.PI) / 180
           const nx = cx + Math.cos(a) * rad
           const ny = cy + Math.sin(a) * rad
@@ -645,28 +1106,12 @@ export const ProceduralSigilCenterpiece: React.FC<{
               <circle
                 cx={nx}
                 cy={ny}
-                r={2.8}
+                r={2.6}
                 fill={dna.foilColor}
                 stroke={dna.primaryColor}
                 strokeWidth="1"
               />
             </g>
-          )
-        })}
-
-        {/* 4 Cardinal Compass Diamonds */}
-        {[0, 90, 180, 270].map((deg) => {
-          const a = (deg * Math.PI) / 180
-          const px = cx + Math.cos(a) * (maxR + 4)
-          const py = cy + Math.sin(a) * (maxR + 4)
-          return (
-            <circle
-              key={deg}
-              cx={px}
-              cy={py}
-              r={2.5}
-              fill={dna.primaryColor}
-            />
           )
         })}
 
@@ -722,7 +1167,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
 /**
  * Full-Bleed Symmetrical Collectible Card Back Artwork
  * Inspired by Clow Cards, Theory11 Foil Playing Cards & Tarot De Marseille.
- * 100% vector sacred geometry uniquely parameterized by the user's DNA—zero clutter or stat boxes.
+ * 100% vector sacred geometry uniquely parameterized by the user's DNA.
  */
 export const ProceduralLuxuryCardBack: React.FC<{
   dna: GenerativeDNA;
@@ -775,7 +1220,6 @@ export const ProceduralLuxuryCardBack: React.FC<{
   )
   const starInner = buildStarPolygramPoints(cx, cy, 68, dna.symmetryOrder, 2, 0)
 
-  // Symmetrical 24-ray harmonic crown (averaged with opposite hour so card back is 100% radially symmetrical!)
   const rawDist =
     hourlyDistribution && hourlyDistribution.length === 24
       ? hourlyDistribution
@@ -873,12 +1317,11 @@ export const ProceduralLuxuryCardBack: React.FC<{
         </g>
       ))}
 
-      {/* Top & Bottom Mirrored Celestial Axis Ornaments (True Tarot / Playing Card Symmetry) */}
+      {/* Top & Bottom Mirrored Celestial Axis Ornaments */}
       {[82, h - 82].map((posY, idx) => {
         const dir = idx === 0 ? 1 : -1
         return (
           <g key={idx}>
-            {/* Vertical Meridian Line */}
             <line
               x1={cx}
               y1={idx === 0 ? 20 : h - 20}
@@ -888,7 +1331,6 @@ export const ProceduralLuxuryCardBack: React.FC<{
               strokeOpacity="0.45"
               strokeWidth="1"
             />
-            {/* Crescent Moon & Sunburst */}
             <circle
               cx={cx}
               cy={posY}
@@ -910,7 +1352,6 @@ export const ProceduralLuxuryCardBack: React.FC<{
               r="4.5"
               fill={dna.primaryColor}
             />
-            {/* Flanking Star Nodes */}
             <circle cx={cx - 48} cy={posY} r="2" fill={dna.primaryColor} fillOpacity="0.6" />
             <circle cx={cx + 48} cy={posY} r="2" fill={dna.primaryColor} fillOpacity="0.6" />
             <line
@@ -978,14 +1419,13 @@ export const ProceduralLuxuryCardBack: React.FC<{
         )
       })}
 
-      {/* Symmetrical 24-Spoke Circadian Harmonic Crown (strictly bounded inside the astrolabe ring!) */}
+      {/* Symmetrical 24-Spoke Circadian Harmonic Crown */}
       {Array.from({ length: 24 }).map((_, hr) => {
         const a = (hr / 24) * Math.PI * 2 - Math.PI / 2
-        // Mirror opposite hour (hr and hr+12) so the card back is 100% point-symmetrical!
         const symVal = (rawDist[hr] + rawDist[(hr + 12) % 24]) * 0.5
         const norm = symVal / maxVal
         const rInner = 34
-        const rOuter = 82 + norm * 36 // bounded strictly within 82..118px!
+        const rOuter = 82 + norm * 36
         return (
           <g key={hr}>
             <line
@@ -1095,7 +1535,7 @@ export const ProceduralLuxuryCardBack: React.FC<{
         {activeCode.slice(0, 4)}
       </text>
 
-      {/* Subtle Engraved Top & Bottom Micro-Typography (Like a Luxury Playing Card) */}
+      {/* Subtle Engraved Top & Bottom Micro-Typography */}
       <text
         x={cx}
         y="36"

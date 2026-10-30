@@ -284,6 +284,26 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     }
   }, [])
 
+  // Mobile DeviceOrientation gyroscope holographic foil response (falls back to touch drag)
+  useEffect(() => {
+    if (!interactive || typeof window === 'undefined' || !('DeviceOrientationEvent' in window)) {
+      return
+    }
+    const handleOrientation = (evt: DeviceOrientationEvent) => {
+      if (isDraggingRef.current || downloading) return
+      const gamma = evt.gamma // left/right tilt [-90, 90]
+      const beta = evt.beta   // front/back tilt [-180, 180]
+      if (gamma === null || beta === null) return
+
+      const gx = Math.max(0, Math.min(100, Math.round(50 + gamma * 1.1)))
+      const gy = Math.max(0, Math.min(100, Math.round(50 + (beta - 45) * 1.1)))
+      const ha = Math.round((gamma * 2 + beta + 360) % 360)
+      setGlare({ gx, gy, ha, op: 0.72 })
+    }
+    window.addEventListener('deviceorientation', handleOrientation, true)
+    return () => window.removeEventListener('deviceorientation', handleOrientation, true)
+  }, [interactive, downloading])
+
   const startInertia = useCallback(() => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
 
@@ -436,12 +456,13 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const fallbackSvgAvatar = generateProceduralAvatarDataUrl(profile.screenName, avatarFeatures)
   const resolvedAvatarUrl = profile.avatarUrl || fallbackSvgAvatar
 
-  // Compute full Generative DNA from 70% Persona Axes + 30% Avatar Visual Features
+  // Compute full Generative DNA from 70% Persona Axes + 30% Avatar Visual Features + 24h Histogram
   const dna = computeGenerativeDNA(slot, activeCode, activeAxes, profile.screenName, {
     nightOwl: features?.nightOwlIndex,
     burstiness: features?.burstinessFano,
     avgChars: features?.avgCharCount,
     consistency: fusionPersona?.consistencyIndex,
+    hourlyDistribution: features?.hourlyDistribution,
     avatarFeatures,
   })
 
@@ -632,6 +653,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                 badgeIcon={slot === 'inner' ? innerIcon : outerArch.badgeIcon}
                 secondaryIcon={slot === 'fusion' ? innerIcon : undefined}
                 avatarUrl={resolvedAvatarUrl}
+                hourlyDistribution={features?.hourlyDistribution}
               />
 
               {/* EDITORIAL TITLE & USER IDENTITY */}
@@ -762,7 +784,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono tracking-widest px-0.5"
               style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
             >
-              <span>X PERSONA</span>
+              <span style={{ color: dna.primaryColor }}>{dna.rarityLabel}</span>
               <span>No.{dna.seed.toString(16).slice(0, 6).toUpperCase()}</span>
             </div>
           </div>
