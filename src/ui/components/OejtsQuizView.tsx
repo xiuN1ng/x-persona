@@ -119,10 +119,10 @@ export const OejtsQuizView: React.FC = () => {
         <div className="pt-6 border-t border-slate-800 flex justify-end">
           <button
             onClick={finishOejts}
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-xl shadow-purple-600/25 transition-all"
+            className="px-6 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-xl shadow-purple-600/25 transition-all cursor-pointer"
           >
             <Send className="w-4 h-4" />
-            <span>提交并查看双视角对照报告</span>
+            <span>完成自评 · 锻造第 2 张【里世界·潜意识真我卡】</span>
           </button>
         </div>
       </div>

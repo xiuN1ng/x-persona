@@ -17,7 +17,12 @@ export interface ShareState {
   oejts?: {
     type: string;
     consistencyIndex: number;
+    ieNormalized?: number;
+    snNormalized?: number;
+    ftNormalized?: number;
+    jpNormalized?: number;
   };
+  isFused?: boolean;
 }
 
 export function encodeShareState(state: ShareState): string {
