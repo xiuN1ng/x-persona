@@ -173,6 +173,55 @@ const INNER_ICONS: Record<string, string> = {
   ESFP: '🥂',
 }
 
+const CARD_BASE_W = 380
+const CARD_BASE_H = 575
+
+/**
+ * Computes a smooth responsive scale factor for the canonical 380×575 3D card
+ * so that Desktop, Tablet, and Mobile screens (from 320px width up to 4K)
+ * render with exact proportions, zero clipping during 3D rotation, and tight layout bounds.
+ */
+function useResponsiveCardScale(isGalleryMode: boolean): number {
+  const compute = useCallback(() => {
+    if (typeof window === 'undefined') return 1
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+
+    if (isGalleryMode) {
+      if (vw < 768) {
+        const availW = vw - 36
+        return Number(Math.max(0.68, Math.min(1, availW / CARD_BASE_W)).toFixed(3))
+      }
+      if (vw < 1200) {
+        const availW = (Math.min(vw, 1152) - 64) / 2
+        return Number(Math.max(0.72, Math.min(0.96, availW / CARD_BASE_W)).toFixed(3))
+      }
+      const availW = (Math.min(vw, 1200) - 80) / 3
+      return Number(Math.max(0.78, Math.min(0.95, availW / CARD_BASE_W)).toFixed(3))
+    }
+
+    const horizontalMargin = vw < 400 ? 32 : vw < 640 ? 40 : 64
+    const widthScale = (vw - horizontalMargin) / CARD_BASE_W
+    const verticalReserved = vw < 640 ? 220 : 245
+    const heightScale = vh > 520 ? (vh - verticalReserved) / CARD_BASE_H : 1
+
+    const rawScale = Math.min(1, widthScale, Math.max(0.76, heightScale))
+    const clamped = Math.max(0.68, Math.min(1, rawScale))
+    return clamped > 0.98 ? 1 : Number(clamped.toFixed(3))
+  }, [isGalleryMode])
+
+  const [scale, setScale] = useState<number>(() => compute())
+
+  useEffect(() => {
+    const handleResize = () => setScale(compute())
+    handleResize()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [compute])
+
+  return scale
+}
+
 interface SingleCardRendererProps {
   slot: CardSlot;
   interactive?: boolean;
@@ -202,6 +251,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
   const cardContainerRef = useRef<HTMLDivElement>(null)
   const cardElementRef = useRef<HTMLDivElement>(null)
+  const cardScale = useResponsiveCardScale(!interactive)
 
   const [downloading, setDownloading] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -467,39 +517,62 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const panelBorder = isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)'
   const cosY = Math.cos((rot.y * Math.PI) / 180)
   const isEdgeOn = Math.abs(cosY) < 0.14
+  const scaledWidth = Math.round(CARD_BASE_W * cardScale)
+  const scaledHeight = Math.round(CARD_BASE_H * cardScale)
 
   return (
-    <div className="flex flex-col items-center">
-      {/* 3D FREE-ORBIT STAGE */}
+    <div className="flex flex-col items-center w-full max-w-full">
+      {/* RESPONSIVE VIEWPORT STAGE WRAPPER:
+          Sizes outer layout box to exact scaled dimensions (380*scale × 575*scale)
+          while keeping inner 3D card at canonical 380×575 for 100% vector & 3D precision */}
       <div
-        ref={cardContainerRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onPointerLeave={handlePointerLeave}
-        onDoubleClick={handleDoubleClick}
-        onClick={onSelect}
-        className={`card-perspective-container select-none ${
-          interactive ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-[1.02] transition-transform'
-        }`}
+        className="relative flex items-start justify-center"
+        style={{
+          width: downloading ? `${CARD_BASE_W}px` : `${scaledWidth}px`,
+          height: downloading ? `${CARD_BASE_H}px` : `${scaledHeight}px`,
+        }}
       >
         <div
-          ref={cardElementRef}
-          style={
-            {
-              transform: downloading
-                ? 'none'
-                : `rotateX(${rot.x.toFixed(2)}deg) rotateY(${rot.y.toFixed(2)}deg)`,
-              '--gx': `${glare.gx}%`,
-              '--gy': `${glare.gy}%`,
-              '--ha': `${glare.ha}deg`,
-              '--op': glare.op,
-              '--card-glow': dna.borderColor,
-            } as React.CSSProperties
-          }
-          className="card-3d-root relative w-[348px] sm:w-[380px] h-[575px] rounded-[30px]"
+          style={{
+            width: `${CARD_BASE_W}px`,
+            height: `${CARD_BASE_H}px`,
+            transform:
+              !downloading && cardScale !== 1 ? `scale(${cardScale})` : undefined,
+            transformOrigin: 'top center',
+          }}
         >
+          {/* 3D FREE-ORBIT STAGE */}
+          <div
+            ref={cardContainerRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+            onDoubleClick={handleDoubleClick}
+            onClick={onSelect}
+            className={`card-perspective-container select-none ${
+              interactive
+                ? 'cursor-grab active:cursor-grabbing'
+                : 'cursor-pointer hover:scale-[1.02] transition-transform'
+            }`}
+          >
+            <div
+              ref={cardElementRef}
+              style={
+                {
+                  transform: downloading
+                    ? 'none'
+                    : `rotateX(${rot.x.toFixed(2)}deg) rotateY(${rot.y.toFixed(2)}deg)`,
+                  '--gx': `${glare.gx}%`,
+                  '--gy': `${glare.gy}%`,
+                  '--ha': `${glare.ha}deg`,
+                  '--op': glare.op,
+                  '--card-glow': dna.borderColor,
+                } as React.CSSProperties
+              }
+              className="card-3d-root relative w-[380px] h-[575px] rounded-[30px]"
+            >
           {/* 20px Physical 3D Extruded Metallic Slab Core (Direct fragment children of preserve-3d root) */}
           {!downloading && (
             <CardSlabThickness dna={dna} rotY={rot.y} activeCode={activeCode} />
@@ -721,18 +794,21 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           </div>
         </div>
       </div>
+        </div>
+      </div>
 
       {/* 360 DRAG TELEMETRY & EXPORT CONTROLS */}
       {interactive && (
-        <div className="w-full max-w-[380px] mt-4 space-y-3">
+        <div className="w-full max-w-[380px] mt-3 sm:mt-4 space-y-2.5 sm:space-y-3 px-1 sm:px-0">
           {/* Interactive Drag Telemetry Bar */}
-          <div className="px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span className="flex items-center gap-1.5 text-purple-300">
-              <Move3d className="w-3.5 h-3.5" />
-              <span>按住卡牌任意拖动 360° 观察正反与侧边</span>
+          <div className="px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+            <span className="flex items-center gap-1 sm:gap-1.5 text-purple-300 truncate">
+              <Move3d className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">按住卡牌任意拖动 360° 观察正反与侧边</span>
+              <span className="sm:hidden">拖动卡牌 360° 旋转观察</span>
             </span>
-            <span className="text-slate-400 font-bold">
-              {isEdgeOn ? '侧面 · 20mm金属脊' : isShowingBack ? '背面 · 专属图腾' : '正面 · 角色卡'} ({Math.round(((rot.y % 360) + 360) % 360)}°)
+            <span className="text-slate-400 font-bold shrink-0">
+              {isEdgeOn ? '侧面 · 金属脊' : isShowingBack ? '背面 · 图腾' : '正面 · 角色'} ({Math.round(((rot.y % 360) + 360) % 360)}°)
             </span>
           </div>
 
@@ -741,10 +817,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
             <button
               onClick={handleDownloadImage}
               disabled={downloading}
-              className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+              className="flex-1 py-2.5 px-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
             >
-              <Download className="w-4 h-4" />
-              <span>
+              <Download className="w-4 h-4 shrink-0" />
+              <span className="truncate">
                 {downloading
                   ? '正在渲染高清卡牌...'
                   : `保存当前${isShowingBack ? '卡背' : '卡面'} (PNG)`}
@@ -755,7 +831,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               href={tweetIntentUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors"
+              className="px-3.5 sm:px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors shrink-0"
             >
               <XIcon className="w-3.5 h-3.5" />
               <span>晒卡</span>
@@ -763,7 +839,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
             <button
               onClick={handleCopyLink}
-              className="px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer"
+              className="px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer shrink-0"
               title="复制链接"
             >
               {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -800,28 +876,32 @@ export const PersonaCard: React.FC = () => {
   const canFuse = hasInnerCard && !isFused
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-2 flex flex-col items-center">
+    <div className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-1 sm:py-2 flex flex-col items-center">
       {/* ==================== 3-CARD DECK SLOT SELECTOR ==================== */}
-      <div className="w-full max-w-2xl mb-5">
-        <div className="grid grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
+      <div className="w-full max-w-2xl mb-3 sm:mb-5">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 p-1 sm:p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
           {/* SLOT 1: OUTER CYBER CARD */}
           <button
             onClick={() => setSelectedCardSlot('outer')}
-            className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border ${
+            className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
               selectedCardSlot === 'outer' && !showTrinityGallery
                 ? 'bg-purple-950/60 border-purple-500/60 shadow-md'
                 : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
             }`}
           >
-            <div className="flex items-center justify-between text-[10px] font-mono text-purple-400 mb-0.5">
-              <span>CARD I · 表世界</span>
-              <span>✓ 已解锁</span>
+            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-purple-400 mb-0.5">
+              <span className="truncate">
+                <span className="hidden sm:inline">CARD </span>I · 表世界
+              </span>
+              <span className="shrink-0">
+                ✓<span className="hidden sm:inline"> 已解锁</span>
+              </span>
             </div>
-            <div className="font-bold text-xs text-white truncate">
+            <div className="font-bold text-[11px] sm:text-xs text-white truncate">
               {persona.archetype.badgeIcon} {persona.archetype.nameZh}
             </div>
-            <div className="text-[10px] font-mono text-slate-400">
-              推文人格 [{persona.code}]
+            <div className="text-[9px] sm:text-[10px] font-mono text-slate-400 truncate">
+              推文 [{persona.code}]
             </div>
           </button>
 
@@ -834,7 +914,7 @@ export const PersonaCard: React.FC = () => {
                 setActiveTab('oejts')
               }
             }}
-            className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border ${
+            className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
               selectedCardSlot === 'inner' && !showTrinityGallery
                 ? 'bg-cyan-950/60 border-cyan-500/60 shadow-md'
                 : hasInnerCard
@@ -842,33 +922,38 @@ export const PersonaCard: React.FC = () => {
                 : 'bg-slate-950/30 border-dashed border-slate-800 hover:border-purple-500/50'
             }`}
           >
-            <div className="flex items-center justify-between text-[10px] font-mono text-cyan-400 mb-0.5">
-              <span>CARD II · 里世界</span>
+            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-cyan-400 mb-0.5">
+              <span className="truncate">
+                <span className="hidden sm:inline">CARD </span>II · 里世界
+              </span>
               {hasInnerCard ? (
-                <span>✓ 已解锁</span>
+                <span className="shrink-0">
+                  ✓<span className="hidden sm:inline"> 已解锁</span>
+                </span>
               ) : (
-                <span className="flex items-center gap-0.5 text-slate-500">
-                  <Lock className="w-2.5 h-2.5" /> 待觉醒
+                <span className="flex items-center gap-0.5 text-slate-500 shrink-0">
+                  <Lock className="w-2.5 h-2.5" />
+                  <span className="hidden sm:inline">待觉醒</span>
                 </span>
               )}
             </div>
             {hasInnerCard && oejtsScores ? (
               <>
-                <div className="font-bold text-xs text-white truncate">
+                <div className="font-bold text-[11px] sm:text-xs text-white truncate">
                   {INNER_ICONS[oejtsScores.type] || '🦋'}{' '}
                   {INNER_ARCHETYPES[oejtsScores.type]?.nameZh || '潜意识真我'}
                 </div>
-                <div className="text-[10px] font-mono text-slate-400">
-                  内心自评 [{oejtsScores.type}]
+                <div className="text-[9px] sm:text-[10px] font-mono text-slate-400 truncate">
+                  自评 [{oejtsScores.type}]
                 </div>
               </>
             ) : (
               <>
-                <div className="font-bold text-xs text-slate-300 truncate">
-                  点击测 32 题自评
+                <div className="font-bold text-[11px] sm:text-xs text-slate-300 truncate">
+                  测 32 题自评
                 </div>
-                <div className="text-[10px] text-purple-400">
-                  铸造第 2 张真我卡牌 →
+                <div className="text-[9px] sm:text-[10px] text-purple-400 truncate">
+                  铸造第 2 张卡 →
                 </div>
               </>
             )}
@@ -885,7 +970,7 @@ export const PersonaCard: React.FC = () => {
                 setActiveTab('oejts')
               }
             }}
-            className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border ${
+            className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
               selectedCardSlot === 'fusion' && !showTrinityGallery
                 ? 'bg-amber-950/60 border-amber-500/70 shadow-md'
                 : isFused
@@ -895,43 +980,48 @@ export const PersonaCard: React.FC = () => {
                 : 'bg-slate-950/20 border-dashed border-slate-800/60 opacity-70'
             }`}
           >
-            <div className="flex items-center justify-between text-[10px] font-mono text-amber-400 mb-0.5">
-              <span>CARD III · 双界融合</span>
+            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-amber-400 mb-0.5">
+              <span className="truncate">
+                <span className="hidden sm:inline">CARD </span>III · 融合
+              </span>
               {isFused ? (
-                <span>✦ UR神装</span>
+                <span className="shrink-0">
+                  ✦<span className="hidden sm:inline"> UR</span>
+                </span>
               ) : canFuse ? (
-                <span className="text-amber-300 font-bold">⚡ 可融合!</span>
+                <span className="text-amber-300 font-bold shrink-0">⚡可合</span>
               ) : (
-                <span className="flex items-center gap-0.5 text-slate-500">
-                  <Lock className="w-2.5 h-2.5" /> 锁定
+                <span className="flex items-center gap-0.5 text-slate-500 shrink-0">
+                  <Lock className="w-2.5 h-2.5" />
+                  <span className="hidden sm:inline">锁定</span>
                 </span>
               )}
             </div>
             {isFused && fusionPersona ? (
               <>
-                <div className="font-bold text-xs text-amber-200 truncate">
+                <div className="font-bold text-[11px] sm:text-xs text-amber-200 truncate">
                   ⚡ {fusionPersona.titleZh}
                 </div>
-                <div className="text-[10px] font-mono text-amber-400/90">
-                  [{fusionPersona.fusionCode}] · 同步 {fusionPersona.consistencyIndex}%
+                <div className="text-[9px] sm:text-[10px] font-mono text-amber-400/90 truncate">
+                  同步 {fusionPersona.consistencyIndex}%
                 </div>
               </>
             ) : canFuse ? (
               <>
-                <div className="font-bold text-xs text-amber-200 truncate">
-                  点击启动【双界融合】
+                <div className="font-bold text-[11px] sm:text-xs text-amber-200 truncate">
+                  启动【双界融合】
                 </div>
-                <div className="text-[10px] text-amber-300/90">
-                  表里双卡共鸣合成 →
+                <div className="text-[9px] sm:text-[10px] text-amber-300/90 truncate">
+                  双卡共鸣合成 →
                 </div>
               </>
             ) : (
               <>
-                <div className="font-bold text-xs text-slate-400 truncate">
+                <div className="font-bold text-[11px] sm:text-xs text-slate-400 truncate">
                   未知融合形态
                 </div>
-                <div className="text-[10px] text-slate-500">
-                  集齐表里两张卡后解锁
+                <div className="text-[9px] sm:text-[10px] text-slate-500 truncate">
+                  集齐两张卡解锁
                 </div>
               </>
             )}
@@ -963,27 +1053,27 @@ export const PersonaCard: React.FC = () => {
 
       {/* ==================== FUSION RITUAL OVERLAY ==================== */}
       {isFusingAnimation && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col items-center justify-center">
-          <div className="relative w-44 h-44 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col items-center justify-center px-6 text-center">
+          <div className="relative w-36 h-36 sm:w-44 sm:h-44 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full border-2 border-dashed border-amber-400 animate-spin" />
             <div className="absolute inset-4 rounded-full border-2 border-purple-500 animate-ping opacity-40" />
-            <Flame className="w-16 h-16 text-amber-400 animate-bounce" />
+            <Flame className="w-14 h-14 sm:w-16 sm:h-16 text-amber-400 animate-bounce" />
           </div>
-          <h3 className="text-2xl font-black text-white mt-6 tracking-wider">
+          <h3 className="text-lg sm:text-2xl font-black text-white mt-6 tracking-wider">
             正在融合【表世界·{persona.code}】与【里世界·{oejtsScores?.type}】...
           </h3>
-          <p className="text-xs font-mono text-amber-300 mt-2">
-            GENERATING CHLADNI INTERFERENCE & SPIROGRAPH TOTEM
+          <p className="text-[11px] sm:text-xs font-mono text-amber-300 mt-2">
+            GENERATING SACRED GEOMETRY & DUAL-WORLD SIGIL
           </p>
         </div>
       )}
 
       {/* ==================== PROMINENT FUSION CALLOUT ==================== */}
       {canFuse && !isFusingAnimation && (
-        <div className="w-full max-w-md mb-5 p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-amber-950/80 to-cyan-950/90 border border-amber-400/60 shadow-2xl flex items-center justify-between gap-4">
+        <div className="w-full max-w-md mb-4 sm:mb-5 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-amber-950/80 to-cyan-950/90 border border-amber-400/60 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div>
             <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 shrink-0" />
               <span>表里双界卡牌已集齐！</span>
             </div>
             <p className="text-[11px] text-slate-200 mt-0.5">
@@ -992,7 +1082,7 @@ export const PersonaCard: React.FC = () => {
           </div>
           <button
             onClick={triggerFusion}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs rounded-xl shrink-0 shadow-lg shadow-amber-500/30 cursor-pointer transition-transform hover:scale-105"
+            className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs rounded-xl shrink-0 shadow-lg shadow-amber-500/30 cursor-pointer transition-transform hover:scale-105 text-center"
           >
             ⚡ 立即融合
           </button>
@@ -1001,8 +1091,8 @@ export const PersonaCard: React.FC = () => {
 
       {/* ==================== MAIN DISPLAY ==================== */}
       {showTrinityGallery ? (
-        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-start justify-items-center py-2">
-          <div className="flex flex-col items-center">
+        <div className="w-full grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start justify-items-center py-2">
+          <div className="flex flex-col items-center w-full">
             <div className="text-xs font-mono text-purple-400 font-bold mb-2">
               【卡 I · 表世界赛博面具】
             </div>
@@ -1014,7 +1104,7 @@ export const PersonaCard: React.FC = () => {
           </div>
 
           {hasInnerCard && (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center w-full">
               <div className="text-xs font-mono text-cyan-400 font-bold mb-2">
                 【卡 II · 里世界潜意识真我】
               </div>
@@ -1027,7 +1117,7 @@ export const PersonaCard: React.FC = () => {
           )}
 
           {isFused ? (
-            <div className="flex flex-col items-center">
+            <div className="flex flex-col items-center w-full md:col-span-2 xl:col-span-1">
               <div className="text-xs font-mono text-amber-400 font-bold mb-2">
                 【卡 III · 双界炼成融合卡】
               </div>
@@ -1038,13 +1128,13 @@ export const PersonaCard: React.FC = () => {
               />
             </div>
           ) : (
-            <div className="w-[348px] h-[575px] rounded-[30px] border-2 border-dashed border-amber-500/40 bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-full max-w-[348px] min-h-[420px] sm:h-[540px] rounded-[30px] border-2 border-dashed border-amber-500/40 bg-slate-900/40 flex flex-col items-center justify-center p-6 sm:p-8 text-center md:col-span-2 xl:col-span-1">
               <Flame className="w-12 h-12 text-amber-400 mb-3 animate-pulse" />
               <div className="text-base font-bold text-white mb-1">
                 第 3 张：双界融合卡待锻造
               </div>
               <p className="text-xs text-slate-400 mb-5">
-                融合 [{persona.code}] 与 [{oejtsScores?.type}]，解锁双多边形干涉星盘与觉醒被动技
+                融合 [{persona.code}] 与 [{oejtsScores?.type}]，解锁双多边形神圣几何星盘与觉醒被动技
               </p>
               <button
                 onClick={triggerFusion}
@@ -1060,7 +1150,7 @@ export const PersonaCard: React.FC = () => {
       )}
 
       {/* ==================== COLLAPSIBLE RAW STATS DRAWER ==================== */}
-      <div className="w-full max-w-[380px] mt-5">
+      <div className="w-full max-w-[380px] mt-4 sm:mt-5 px-1 sm:px-0">
         <button
           onClick={() => setShowDetails(!showDetails)}
           className="w-full py-2.5 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center justify-between transition-colors cursor-pointer"

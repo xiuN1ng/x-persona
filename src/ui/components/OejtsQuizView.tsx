@@ -11,16 +11,16 @@ export const OejtsQuizView: React.FC = () => {
   const progressPercent = Math.round((answeredCount / totalCount) * 100)
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8">
+    <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 py-4 sm:py-8">
       <button
         onClick={() => setActiveTab('report')}
-        className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white mb-6 transition-colors"
+        className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white mb-4 sm:mb-6 transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-3.5 h-3.5" />
         <span>返回我的 X 人格卡</span>
       </button>
 
-      <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-10 shadow-2xl backdrop-blur">
+      <div className="rounded-2xl sm:rounded-3xl bg-slate-900/90 border border-slate-800 p-4 sm:p-10 shadow-2xl backdrop-blur">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
           <div>
@@ -59,16 +59,16 @@ export const OejtsQuizView: React.FC = () => {
         </div>
 
         {/* Questions List */}
-        <div className="space-y-6 my-8">
+        <div className="space-y-4 sm:space-y-6 my-6 sm:my-8">
           {OEJTS_ITEMS.map((item) => {
             const currentVal = oejtsAnswers[item.id] || 3
 
             return (
               <div
                 key={item.id}
-                className="p-5 rounded-2xl bg-slate-950 border border-slate-800/80 hover:border-slate-700 transition-colors"
+                className="p-3.5 sm:p-5 rounded-2xl bg-slate-950 border border-slate-800/80 hover:border-slate-700 transition-colors"
               >
-                <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                   <span className="text-xs font-mono text-purple-400 font-bold">
                     Q{item.id} · [{item.dimension}]
                   </span>
@@ -79,24 +79,24 @@ export const OejtsQuizView: React.FC = () => {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-slate-300 mb-4">
-                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm text-slate-300 mb-3 sm:mb-4">
+                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-left">
                     <span className="text-slate-500 mr-1.5 font-bold">1:</span>
                     <span>{item.leftZh}</span>
                   </div>
-                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-right sm:text-left">
+                  <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-800 text-left">
                     <span className="text-slate-500 mr-1.5 font-bold">5:</span>
                     <span>{item.rightZh}</span>
                   </div>
                 </div>
 
                 {/* 1-5 Radio Pills */}
-                <div className="flex items-center justify-between gap-2 max-w-md mx-auto pt-2">
+                <div className="flex items-center justify-between gap-1.5 sm:gap-2 max-w-md mx-auto pt-1 sm:pt-2">
                   {[1, 2, 3, 4, 5].map((val) => (
                     <button
                       key={val}
                       onClick={() => setOejtsAnswer(item.id, val)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-mono font-bold transition-all ${
+                      className={`flex-1 py-2.5 sm:py-2 rounded-xl text-[11px] sm:text-xs font-mono font-bold transition-all cursor-pointer ${
                         currentVal === val
                           ? 'bg-gradient-to-tr from-purple-600 to-cyan-500 text-white shadow-lg shadow-purple-600/30 scale-105'
                           : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
@@ -119,9 +119,9 @@ export const OejtsQuizView: React.FC = () => {
         <div className="pt-6 border-t border-slate-800 flex justify-end">
           <button
             onClick={finishOejts}
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-xl shadow-purple-600/25 transition-all cursor-pointer"
+            className="w-full sm:w-auto justify-center px-6 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 shadow-xl shadow-purple-600/25 transition-all cursor-pointer"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-4 h-4 shrink-0" />
             <span>完成自评 · 锻造第 2 张【里世界·潜意识真我卡】</span>
           </button>
         </div>
