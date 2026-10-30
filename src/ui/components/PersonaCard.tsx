@@ -547,6 +547,44 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const scaledWidth = Math.round(CARD_BASE_W * cardScale)
   const scaledHeight = Math.round(CARD_BASE_H * cardScale)
 
+  // Personal behavioral & lexical fingerprint tags (extracted directly from the user's posts)
+  const personalTags = React.useMemo(() => {
+    const tags: string[] = []
+    if (features?.topHashtags?.length) {
+      for (const h of features.topHashtags.slice(0, 2)) {
+        const clean = h.tag.replace(/^#/, '').trim()
+        if (clean && clean.length <= 10) tags.push(`#${clean}`)
+      }
+    }
+    if (features?.topKeywords?.length) {
+      for (const k of features.topKeywords) {
+        if (tags.length >= 3) break
+        const clean = k.word.trim()
+        if (clean && clean.length >= 2 && clean.length <= 8 && !tags.includes(`#${clean}`)) {
+          tags.push(`#${clean}`)
+        }
+      }
+    }
+    if (tags.length === 0) {
+      tags.push(activeAxes.field < 50 ? '#广播发射' : '#高频共鸣')
+      tags.push(activeAxes.density < 50 ? '#深度长文' : '#灵感速记')
+      tags.push(activeAxes.temperature < 50 ? '#冷峻解构' : '#炽热真性')
+    }
+    return tags.slice(0, 3)
+  }, [features, activeAxes])
+
+  const cleanedSignaturePost = React.useMemo(() => {
+    const raw = features?.mostEngagedPost?.text
+    if (!raw) return null
+    const withoutUrls = raw
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return withoutUrls.length >= 4 ? withoutUrls : null
+  }, [features])
+
+  const peakHourLabel = `${String(dna.peakHour).padStart(2, '0')}:00 峰值`
+
   return (
     <div className="flex flex-col items-center w-full max-w-full">
       {/* RESPONSIVE VIEWPORT STAGE WRAPPER:
@@ -657,8 +695,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               />
 
               {/* EDITORIAL TITLE & USER IDENTITY */}
-              <div className="mt-2 text-center">
-                <h2 className="text-[24px] font-black tracking-wider leading-tight">
+              <div className="mt-1.5 text-center w-full">
+                <h2 className="text-[22px] font-black tracking-wider leading-tight">
                   {slot === 'outer'
                     ? outerArch.nameZh
                     : slot === 'inner'
@@ -676,17 +714,44 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
                 </div>
                 <div
-                  className="text-[11px] font-mono mt-1"
+                  className="text-[11px] font-mono mt-0.5 truncate px-2"
                   style={{ color: dna.mutedTextColor }}
                 >
-                  {profile.name} <span className="opacity-70">@{profile.screenName}</span>
+                  {profile.name} <span className="opacity-75">@{profile.screenName}</span>
+                </div>
+
+                {/* PERSONAL LEXICAL & CIRCADIAN FINGERPRINT PILLS */}
+                <div className="flex items-center justify-center flex-wrap gap-1 mt-1.5 px-1">
+                  {personalTags.map((tag, i) => (
+                    <span
+                      key={i}
+                      className="px-1.5 py-0.5 rounded-md text-[9px] font-mono tracking-wider"
+                      style={{
+                        backgroundColor: dna.surfaceBg,
+                        border: `1px solid ${dna.primaryColor}45`,
+                        color: dna.primaryColor,
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                  <span
+                    className="px-1.5 py-0.5 rounded-md text-[9px] font-mono tracking-wider"
+                    style={{
+                      backgroundColor: dna.surfaceBg,
+                      border: `1px solid ${panelBorder}`,
+                      color: dna.mutedTextColor,
+                    }}
+                  >
+                    {peakHourLabel}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* POETIC ESSENCE / AWAKENED PASSIVE */}
+            {/* POETIC ESSENCE / PERSONAL REPRESENTATIVE VOICE / AWAKENED PASSIVE */}
             <div
-              className="relative z-10 px-3.5 py-2.5 rounded-xl text-center"
+              className="relative z-10 px-3 py-2 rounded-xl text-center"
               style={{
                 backgroundColor: dna.surfaceBg,
                 border: `1px solid ${panelBorder}`,
@@ -702,6 +767,18 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                   </div>
                   <p className="text-[11px] leading-relaxed line-clamp-2">
                     {fusionPersona.passiveDescZh}
+                  </p>
+                </div>
+              ) : slot === 'outer' && !llmOutput?.roast && cleanedSignaturePost ? (
+                <div>
+                  <div
+                    className="text-[9px] font-mono tracking-widest mb-0.5 opacity-85"
+                    style={{ color: dna.primaryColor }}
+                  >
+                    ✦ 高赞原声代表作 {features?.mostEngagedPost?.likes ? `· ♥ ${features.mostEngagedPost.likes}` : ''}
+                  </div>
+                  <p className="text-[11px] leading-snug italic line-clamp-2">
+                    “{cleanedSignaturePost}”
                   </p>
                 </div>
               ) : (
