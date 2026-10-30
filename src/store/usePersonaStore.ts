@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Profile, Post } from '../providers/types'
 import { FxTwitterProvider } from '../providers/fxtwitter'
+import { resolveAvatarAndExtractFeatures, computeDeterministicAvatarFallback, generateProceduralAvatarDataUrl } from '../providers/avatar'
 import { getCachedUserData, setCachedUserData } from '../providers/cache'
 import type { FeatureVector } from '../features/types'
 import { computeFeatureVector } from '../features'
@@ -48,6 +49,7 @@ interface PersonaStoreState {
   setSelectedCardSlot: (slot: CardSlot) => void;
   setShowTrinityGallery: (show: boolean) => void;
   fetchPersonaData: (targetHandle: string, forceFresh?: boolean) => Promise<void>;
+  ensureAvatarResolved: () => Promise<void>;
   importArchivePosts: (posts: Post[], handle?: string) => void;
   applyLlmOutput: (output: PersonaLlmOutput) => void;
   setOejtsAnswer: (id: number, value: number) => void;
@@ -90,6 +92,29 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
   setSelectedCardSlot: (selectedCardSlot) => set({ selectedCardSlot, showTrinityGallery: false }),
   setShowTrinityGallery: (showTrinityGallery) => set({ showTrinityGallery }),
 
+  ensureAvatarResolved: async () => {
+    const { profile, posts } = get()
+    if (!profile) return
+    if (profile.avatarUrl.startsWith('data:image/') && profile.avatarFeatures) {
+      return
+    }
+    const sourceUrl = profile.rawAvatarUrl || profile.avatarUrl
+    const { avatarDataUrl, avatarFeatures } = await resolveAvatarAndExtractFeatures(
+      sourceUrl,
+      profile.screenName
+    )
+    const updatedProfile: Profile = {
+      ...profile,
+      rawAvatarUrl: sourceUrl,
+      avatarUrl: avatarDataUrl,
+      avatarFeatures,
+    }
+    set({ profile: updatedProfile })
+    if (posts.length > 0) {
+      await setCachedUserData(profile.screenName, updatedProfile, posts)
+    }
+  },
+
   fetchPersonaData: async (targetHandle: string, forceFresh = false) => {
     const cleanHandle = targetHandle.trim().replace(/^@+/, '')
     if (!cleanHandle) {
@@ -108,12 +133,28 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
       if (!forceFresh) {
         const cached = await getCachedUserData(cleanHandle)
         if (cached && cached.posts.length > 0) {
-          set({ progress: { current: 60, total: 100, message: '从本地加载推文数据并锻造表世界卡牌...' } })
+          set({ progress: { current: 55, total: 100, message: '正在解析头像色彩权重与推文特征...' } })
+          let resolvedProfile = cached.profile
+          if (!resolvedProfile.avatarUrl.startsWith('data:image/') || !resolvedProfile.avatarFeatures) {
+            const sourceUrl = resolvedProfile.rawAvatarUrl || resolvedProfile.avatarUrl
+            const { avatarDataUrl, avatarFeatures } = await resolveAvatarAndExtractFeatures(
+              sourceUrl,
+              cleanHandle
+            )
+            resolvedProfile = {
+              ...resolvedProfile,
+              rawAvatarUrl: sourceUrl,
+              avatarUrl: avatarDataUrl,
+              avatarFeatures,
+            }
+            await setCachedUserData(cleanHandle, resolvedProfile, cached.posts)
+          }
+
           const features = computeFeatureVector(cached.posts)
           const axes = computeAxisScores(features)
           const persona = determineArchetype(axes)
           set({
-            profile: cached.profile,
+            profile: resolvedProfile,
             posts: cached.posts,
             features,
             persona,
@@ -132,33 +173,48 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
       }
 
       const provider = new FxTwitterProvider()
-      set({ progress: { current: 20, total: 100, message: `正在拉取 @${cleanHandle} 的用户画像...` } })
+      set({ progress: { current: 20, total: 100, message: `正在拉取 @${cleanHandle} 的用户画像与高清头像...` } })
 
-      const profile = await provider.fetchProfile(cleanHandle)
+      const rawProfile = await provider.fetchProfile(cleanHandle)
+
+      // Kick off avatar resolution & pixel extraction concurrently with timeline fetch
+      const avatarPromise = resolveAvatarAndExtractFeatures(
+        rawProfile.rawAvatarUrl || rawProfile.avatarUrl,
+        cleanHandle
+      )
 
       set({ progress: { current: 40, total: 100, message: '正在拉取推文历史与互动数据...' } })
 
-      const posts = await provider.fetchTimeline(cleanHandle, {
-        max: 160,
-        includeReplies: true,
-        onProgress: (fetched, total) => {
-          set({
-            progress: {
-              current: Math.min(40 + Math.round((fetched / total) * 45), 85),
-              total: 100,
-              message: `已获取 ${fetched} 条公开推文...`,
-            },
-          })
-        },
-      })
+      const [posts, resolvedAvatar] = await Promise.all([
+        provider.fetchTimeline(cleanHandle, {
+          max: 160,
+          includeReplies: true,
+          onProgress: (fetched, total) => {
+            set({
+              progress: {
+                current: Math.min(40 + Math.round((fetched / total) * 45), 85),
+                total: 100,
+                message: `已获取 ${fetched} 条公开推文...`,
+              },
+            })
+          },
+        }),
+        avatarPromise,
+      ])
 
       if (posts.length === 0) {
         throw new Error('未获取到该用户的公开推文，可能为私密账号或无发帖历史')
       }
 
+      const profile: Profile = {
+        ...rawProfile,
+        avatarUrl: resolvedAvatar.avatarDataUrl,
+        avatarFeatures: resolvedAvatar.avatarFeatures,
+      }
+
       await setCachedUserData(cleanHandle, profile, posts)
 
-      set({ progress: { current: 90, total: 100, message: '正在程序化生成【表世界·赛博人格卡】...' } })
+      set({ progress: { current: 90, total: 100, message: '正在融合头像色彩权重，锻造【表世界·赛博人格卡】...' } })
 
       const features = computeFeatureVector(posts)
       const axes = computeAxisScores(features)
@@ -190,11 +246,13 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
 
   importArchivePosts: (posts: Post[], mockHandle = 'archive_user') => {
     if (posts.length === 0) return
+    const fallbackAvatarFeatures = computeDeterministicAvatarFallback(mockHandle)
     const profile: Profile = {
       screenName: mockHandle,
       name: mockHandle,
       description: 'Imported from local X archive',
-      avatarUrl: '',
+      avatarUrl: generateProceduralAvatarDataUrl(mockHandle, fallbackAvatarFeatures),
+      avatarFeatures: fallbackAvatarFeatures,
       followers: 0,
       following: 0,
       statusesCount: posts.length,

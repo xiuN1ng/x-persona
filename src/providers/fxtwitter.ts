@@ -1,4 +1,5 @@
 import type { DataProvider, FetchTimelineOptions, Post, Profile } from './types'
+import { upgradeTwitterAvatarUrl } from './avatar'
 
 interface FxUserResponse {
   code: number;
@@ -106,11 +107,13 @@ export class FxTwitterProvider implements DataProvider {
     }
 
     const u = data.user
+    const rawAvatarUrl = u.avatar_url || ''
     return {
       screenName: u.screen_name,
       name: u.name,
       description: u.description || '',
-      avatarUrl: u.avatar_url || '',
+      avatarUrl: upgradeTwitterAvatarUrl(rawAvatarUrl),
+      rawAvatarUrl,
       bannerUrl: u.banner_url || '',
       followers: u.followers || 0,
       following: u.following || 0,

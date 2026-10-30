@@ -4,6 +4,7 @@ import { determineArchetype } from '../axes'
 import { scoreOejts, comparePersonas } from '../../oejts/scoring'
 import { computeProceduralCardStyle } from '../../ui/components/ProceduralArt'
 import { computeGenerativeDNA } from '../../ui/components/GenerativeCanvas'
+import { analyzeAvatarPixels, upgradeTwitterAvatarUrl } from '../../providers/avatar'
 
 describe('Dual-World Card Fusion & Procedural Style Engine', () => {
   it('deterministically synthesizes Card III (Fusion Card) and 1-of-1 Generative DNA from numeric vectors', () => {
@@ -46,5 +47,45 @@ describe('Dual-World Card Fusion & Procedural Style Engine', () => {
     expect(dna1.chladniM).not.toEqual(dna2.chladniM)
     expect(dna1.hypotrochoidr).not.toEqual(dna2.hypotrochoidr)
     expect(dna3.seed).toBeGreaterThan(0)
+  })
+
+  it('extracts visual features from user avatar pixels and applies 30% weight to card Generative DNA', () => {
+    expect(
+      upgradeTwitterAvatarUrl('https://pbs.twimg.com/profile_images/123/abc_normal.jpg')
+    ).toBe('https://pbs.twimg.com/profile_images/123/abc_400x400.jpg')
+
+    // Create two synthetic 16x16 RGBA pixel buffers: one warm crimson/gold, one cool glacier cyan
+    const warmBuffer = new Uint8ClampedArray(16 * 16 * 4)
+    const coolBuffer = new Uint8ClampedArray(16 * 16 * 4)
+    for (let i = 0; i < 16 * 16; i++) {
+      warmBuffer[i * 4] = 240
+      warmBuffer[i * 4 + 1] = 65 + (i % 50)
+      warmBuffer[i * 4 + 2] = 30
+      warmBuffer[i * 4 + 3] = 255
+
+      coolBuffer[i * 4] = 20
+      coolBuffer[i * 4 + 1] = 175
+      coolBuffer[i * 4 + 2] = 245 - (i % 40)
+      coolBuffer[i * 4 + 3] = 255
+    }
+
+    const warmAvatar = analyzeAvatarPixels(warmBuffer, 16, 16, 'coldmountainlab')
+    const coolAvatar = analyzeAvatarPixels(coolBuffer, 16, 16, 'coldmountainlab')
+
+    expect(warmAvatar.warmth).toBeGreaterThan(coolAvatar.warmth)
+    expect(warmAvatar.dominantColorHex).not.toEqual(coolAvatar.dominantColorHex)
+
+    const baseAxes = { field: 50, density: 50, temperature: 50, rhythm: 50 }
+    const dnaWarm = computeGenerativeDNA('outer', 'BEFD', baseAxes, 'coldmountainlab', {
+      avatarFeatures: warmAvatar,
+    })
+    const dnaCool = computeGenerativeDNA('outer', 'BEFD', baseAxes, 'coldmountainlab', {
+      avatarFeatures: coolAvatar,
+    })
+
+    expect(dnaWarm.avatarWeightPercent).toBe(30)
+    expect(dnaWarm.primaryColor).not.toEqual(dnaCool.primaryColor)
+    expect(dnaWarm.chladniA).not.toEqual(dnaCool.chladniA)
+    expect(dnaWarm.hypotrochoidd).toBeGreaterThan(dnaCool.hypotrochoidd)
   })
 })

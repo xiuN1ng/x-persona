@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react'
 import type { AxisScores } from '../../persona/axes'
+import type { AvatarVisualFeatures } from '../../providers/types'
 
 // Fast deterministic PRNG (Mulberry32)
 export function createRng(seed: number) {
@@ -21,9 +22,29 @@ export function hashStr(str: string): number {
   return h >>> 0
 }
 
+function parseHexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace(/^#/, '')
+  if (clean.length !== 6) return [168, 85, 247]
+  const n = parseInt(clean, 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+}
+
+/**
+ * Blends two hex colors by weightB (0..1) in RGB space
+ */
+export function blendHexColors(hexA: string, hexB: string, weightB: number): string {
+  const wB = Math.max(0, Math.min(1, weightB))
+  const wA = 1 - wB
+  const [r1, g1, b1] = parseHexToRgb(hexA)
+  const [r2, g2, b2] = parseHexToRgb(hexB)
+  const r = Math.round(r1 * wA + r2 * wB)
+  const g = Math.round(g1 * wA + g2 * wB)
+  const b = Math.round(b1 * wA + b2 * wB)
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
 export interface GenerativeDNA {
   seed: number;
-  // 12 distinct color worlds (including light/ivory, crimson/ink, glacier, gold/obsidian, aurora, etc.)
   paletteName: string;
   isLightTheme: boolean;
   bgBase: string;
@@ -34,6 +55,11 @@ export interface GenerativeDNA {
   textColor: string;
   mutedTextColor: string;
   borderColor: string;
+
+  // Avatar contribution telemetry (30% style weight)
+  avatarWeightPercent: number;
+  avatarSwatches: string[];
+  avatarDominantHue: number;
 
   // Mathematical wave & geometry parameters
   chladniN: number;
@@ -74,7 +100,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#d97706',
     text: '#1c1917',
     muted: '#57534e',
-    border: 'rgba(194, 120, 3, 0.45)',
+    border: 'rgba(194, 120, 3, 0.48)',
   },
   // 1: 苍翠青瓷 (Jade Celadon - Fresh Light Mint & Emerald)
   {
@@ -87,7 +113,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#10b981',
     text: '#064e3b',
     muted: '#3f6259',
-    border: 'rgba(4, 120, 87, 0.4)',
+    border: 'rgba(4, 120, 87, 0.45)',
   },
   // 2: 幻彩珍珠 (Iridescent Pearl - Fresh Pastel Lavender & Sky)
   {
@@ -100,7 +126,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#0284c7',
     text: '#1e1b4b',
     muted: '#4c1d95',
-    border: 'rgba(109, 40, 217, 0.38)',
+    border: 'rgba(109, 40, 217, 0.42)',
   },
   // 3: 落日流霞 (Sunset Coral - Warm Light Cream & Rose)
   {
@@ -113,7 +139,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#9333ea',
     text: '#3b0712',
     muted: '#7f1d1d',
-    border: 'rgba(225, 29, 72, 0.4)',
+    border: 'rgba(225, 29, 72, 0.42)',
   },
   // 4: 冰川银钛 (Glacier Titanium - Crisp Ice Blue & Slate)
   {
@@ -126,7 +152,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#0891b2',
     text: '#0c2747',
     muted: '#334e68',
-    border: 'rgba(3, 105, 161, 0.4)',
+    border: 'rgba(3, 105, 161, 0.42)',
   },
   // 5: 朱砂玄墨 (Cinnabar Ink - Wuxia Crimson & Deep Ink)
   {
@@ -139,7 +165,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#fde047',
     text: '#fff1f2',
     muted: '#fda4af',
-    border: 'rgba(244, 63, 94, 0.5)',
+    border: 'rgba(244, 63, 94, 0.55)',
   },
   // 6: 紫微星渊 (Astral Amethyst - Deep Cosmic Violet & Gold)
   {
@@ -152,7 +178,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#fbbf24',
     text: '#faf5ff',
     muted: '#d8b4fe',
-    border: 'rgba(192, 132, 252, 0.5)',
+    border: 'rgba(192, 132, 252, 0.55)',
   },
   // 7: 赛博霓虹 (Cyber Neon - Matrix Cyan & Electric Magenta)
   {
@@ -165,7 +191,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#38bdf8',
     text: '#ecfeff',
     muted: '#67e8f9',
-    border: 'rgba(34, 211, 238, 0.5)',
+    border: 'rgba(34, 211, 238, 0.55)',
   },
   // 8: 黑曜熔金 (Obsidian Gold - Royal Black & Liquid Gold)
   {
@@ -178,7 +204,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#fef08a',
     text: '#fefce8',
     muted: '#fde68a',
-    border: 'rgba(251, 191, 36, 0.55)',
+    border: 'rgba(251, 191, 36, 0.6)',
   },
   // 9: 深海幽萤 (Bioluminescent Abyss - Emerald & Teal Glow)
   {
@@ -191,71 +217,121 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#a7f3d0',
     text: '#ecfdf5',
     muted: '#6ee7b7',
-    border: 'rgba(52, 211, 153, 0.5)',
+    border: 'rgba(52, 211, 153, 0.55)',
   },
 ]
 
+export interface ExtraGenerativeMetrics {
+  nightOwl?: number;
+  burstiness?: number;
+  avgChars?: number;
+  consistency?: number;
+  avatarFeatures?: AvatarVisualFeatures;
+}
+
+/**
+ * Deterministically synthesizes the card's Generative DNA by combining:
+ * - 70% Weight: Persona Axes (X Behavioral Axes for Card I, OEJTS Jungian Axes for Card II, Alchemical Synthesis for Card III)
+ * - 30% Weight: User Avatar Visual Features (Dominant Hue, Luminance, Saturation, Warmth, Edge Detail Density, Perceptual Hash)
+ */
 export function computeGenerativeDNA(
   variant: 'outer' | 'inner' | 'fusion',
   code: string,
   axes: AxisScores,
   handle: string,
-  extraMetrics?: {
-    nightOwl?: number;
-    burstiness?: number;
-    avgChars?: number;
-    consistency?: number;
-  }
+  extraMetrics?: ExtraGenerativeMetrics | number[]
 ): GenerativeDNA {
-  const rawStr = `${variant}:${code}:${handle.toLowerCase()}:${axes.field}:${axes.density}:${axes.temperature}:${axes.rhythm}:${extraMetrics?.avgChars ?? 100}:${extraMetrics?.burstiness ?? 1}`
+  const extra: ExtraGenerativeMetrics = Array.isArray(extraMetrics) ? {} : extraMetrics || {}
+  const avatar = extra.avatarFeatures
+
+  // Avatar Style Weight = 30% (0.30), Persona Weight = 70% (0.70)
+  const AVATAR_WEIGHT = 0.30
+  const PERSONA_WEIGHT = 0.70
+
+  const avatarSeedPart = avatar
+    ? `${avatar.perceptualHash}:${avatar.dominantHue}:${avatar.luminance}:${avatar.detailDensity}`
+    : 'no-avatar'
+
+  const rawStr = `${variant}:${code}:${handle.toLowerCase()}:${axes.field}:${axes.density}:${axes.temperature}:${axes.rhythm}:${extra.avgChars ?? 100}:${extra.burstiness ?? 1}:${avatarSeedPart}`
   const seed = hashStr(rawStr)
   const rng = createRng(seed)
 
-  // Deterministic Color World selection driven by personality traits (not random):
-  // - Night owl index & Rhythm & Variant determine Light vs Dark & Hue family
+  // Weighted composite metrics blending 70% Persona + 30% Avatar Visual DNA
+  const weightedWarmth = avatar
+    ? axes.temperature * PERSONA_WEIGHT + avatar.warmth * AVATAR_WEIGHT
+    : axes.temperature
+  const weightedDetail = avatar
+    ? axes.density * PERSONA_WEIGHT + avatar.detailDensity * AVATAR_WEIGHT
+    : axes.density
+  const weightedEnergy = avatar
+    ? axes.rhythm * PERSONA_WEIGHT + avatar.saturation * AVATAR_WEIGHT
+    : axes.rhythm
+  const weightedField = avatar
+    ? axes.field * PERSONA_WEIGHT + avatar.contrast * AVATAR_WEIGHT
+    : axes.field
+  const avatarLum = avatar ? avatar.luminance : 55
+
+  // Deterministic Color World selection driven by 70% personality traits + 30% avatar luminance/hue/warmth
   let worldIndex = 0
   if (variant === 'fusion') {
-    // Fusion uses either Obsidian Gold (8), Astral Amethyst (6), or Iridescent Pearl (2)
-    const c = extraMetrics?.consistency ?? 75
-    worldIndex = c >= 80 ? 8 : c >= 60 ? 2 : 5
+    const c = extra.consistency ?? 75
+    if (c >= 78) worldIndex = avatarLum > 72 ? 0 : 8 // Solar Alabaster or Obsidian Gold
+    else if (c >= 58) worldIndex = avatarLum > 55 ? 2 : 6 // Iridescent Pearl or Astral Amethyst
+    else worldIndex = weightedWarmth >= 52 ? 5 : 7 // Cinnabar Ink or Cyber Neon
   } else if (variant === 'inner') {
-    // Inner Soul cards lean towards fresh, ethereal Tarot aesthetics
-    if (code.includes('NF')) worldIndex = axes.temperature >= 55 ? 2 : 6 // Pearl or Amethyst
-    else if (code.includes('NT')) worldIndex = axes.field >= 50 ? 4 : 7 // Glacier or Cyber
-    else if (code.includes('SJ')) worldIndex = axes.rhythm < 50 ? 1 : 0 // Jade or Solar Gold
-    else worldIndex = axes.temperature >= 50 ? 3 : 9 // Sunset Coral or Abyssal
+    const preferLight = avatarLum >= 46
+    if (code.includes('NF')) worldIndex = preferLight ? 2 : 6
+    else if (code.includes('NT')) worldIndex = preferLight ? 4 : 7
+    else if (code.includes('SJ')) worldIndex = weightedWarmth < 50 ? 1 : 0
+    else worldIndex = preferLight ? 3 : 9
   } else {
-    // Outer Card: driven by 4 axes + nightOwl
-    const nightOwl = extraMetrics?.nightOwl ?? 15
-    if (nightOwl >= 28) {
-      // Heavy night owls get deep nocturnal worlds (5, 6, 7, 9)
-      worldIndex = 5 + ((axes.field + axes.temperature + seed) % 5)
-    } else if (axes.temperature >= 65 && axes.rhythm >= 65) {
-      // High passion + high burst -> Cinnabar Ink (5) or Sunset Coral (3)
-      worldIndex = axes.field < 50 ? 5 : 3
-    } else if (axes.temperature < 45) {
-      // Cool Analyst -> Glacier Titanium (4) or Jade Celadon (1)
-      worldIndex = axes.density < 50 ? 1 : 4
+    const nightOwl = extra.nightOwl ?? 15
+    // Combine nocturnal posting behavior (70%) with dark avatar luminance (30%)
+    const nocturnalScore = nightOwl * 2.2 * PERSONA_WEIGHT + (100 - avatarLum) * AVATAR_WEIGHT
+    if (nocturnalScore >= 52) {
+      const darkWorlds = [5, 6, 7, 8, 9]
+      const hueOffset = avatar ? Math.floor(avatar.dominantHue / 72) : 0
+      worldIndex = darkWorlds[(Math.round(weightedField) + hueOffset + seed) % darkWorlds.length]
+    } else if (weightedWarmth >= 62 && weightedEnergy >= 60) {
+      worldIndex = avatarLum < 42 ? 5 : 3
+    } else if (weightedWarmth < 46) {
+      worldIndex = weightedDetail < 50 ? 1 : 4
     } else {
-      // Balanced / Sunny -> Solar Alabaster (0), Iridescent Pearl (2), or Sunset Coral (3)
       const lightWorlds = [0, 1, 2, 3, 4]
-      worldIndex = lightWorlds[(axes.field + axes.density + seed) % lightWorlds.length]
+      const hueOffset = avatar ? Math.floor(avatar.dominantHue / 72) : 0
+      worldIndex = lightWorlds[(Math.round(weightedField + weightedDetail) + hueOffset + seed) % lightWorlds.length]
     }
   }
 
   const world = COLOR_WORLDS[worldIndex] || COLOR_WORLDS[0]
 
-  // Chladni plate wave numbers (n, m) uniquely derived from exact scores
-  const chladniN = 1 + (Math.round(axes.field / 14) % 7) + rng() * 0.4
-  const chladniM = 2 + (Math.round(axes.density / 12) % 8) + rng() * 0.4
-  const chladniA = ((axes.temperature - 50) / 50) * 1.8 + (rng() - 0.5) * 0.5
-  const chladniB = ((axes.rhythm - 50) / 50) * 1.8 + (rng() - 0.5) * 0.5
+  // Blend the world's base palette with the user's extracted Avatar colors (30%-35% chromatic infusion)
+  const primaryColor = avatar
+    ? blendHexColors(world.primary, avatar.dominantColorHex, 0.34)
+    : world.primary
+  const secondaryColor = avatar
+    ? blendHexColors(world.secondary, avatar.secondaryColorHex, 0.34)
+    : world.secondary
+  const tertiaryColor = avatar
+    ? blendHexColors(world.tertiary, avatar.accentColorHex, 0.42)
+    : world.tertiary
+
+  const [pr, pg, pb] = parseHexToRgb(primaryColor)
+  const borderColor = `rgba(${pr}, ${pg}, ${pb}, ${world.isLight ? 0.48 : 0.58})`
+
+  // Chladni plate wave numbers (n, m) derived from 70% Persona + 30% Avatar detail/contrast
+  const chladniN = 1 + (Math.round(weightedField / 13) % 7) + rng() * 0.45
+  const chladniM = 2 + (Math.round(weightedDetail / 11) % 8) + rng() * 0.45
+  const chladniA = ((weightedWarmth - 50) / 50) * 1.8 + (rng() - 0.5) * 0.5
+  const chladniB = ((weightedEnergy - 50) / 50) * 1.8 + (rng() - 0.5) * 0.5
 
   // Spirograph / Hypotrochoid parameters for centerpiece sacred geometry
-  const symmetryOrder = 3 + ((Math.round(axes.field / 10) + Math.round(axes.rhythm / 15) + (seed % 5)) % 10) // 3 to 12
-  const hypotrochoidR = 56
+  const hueStep = avatar ? Math.floor(avatar.dominantHue / 45) : 0
+  const symmetryOrder =
+    3 + ((Math.round(weightedField / 10) + Math.round(weightedEnergy / 15) + hueStep + (seed % 5)) % 10)
+  const hypotrochoidR = 58
   const hypotrochoidr = (hypotrochoidR / symmetryOrder) * (1 + (seed % 3))
-  const hypotrochoidd = 18 + (axes.temperature / 100) * 32
+  const hypotrochoidd = 18 + (weightedWarmth / 100) * 32
 
   const frameStyles: GenerativeDNA['frameStyle'][] = [
     'celestial',
@@ -268,7 +344,7 @@ export function computeGenerativeDNA(
       ? 'alchemical-seal'
       : variant === 'inner'
       ? 'tarot-arch'
-      : axes.temperature < 48
+      : weightedWarmth < 48
       ? 'cyber-hud'
       : frameStyles[seed % frameStyles.length]
 
@@ -281,9 +357,9 @@ export function computeGenerativeDNA(
   const topologyMode =
     variant === 'fusion'
       ? 'vortex'
-      : axes.field >= 62
+      : weightedField >= 62
       ? 'constellation'
-      : axes.rhythm >= 65
+      : weightedEnergy >= 65
       ? 'flowfield'
       : topologies[seed % topologies.length]
 
@@ -293,12 +369,15 @@ export function computeGenerativeDNA(
     isLightTheme: world.isLight,
     bgBase: world.bgBase,
     bgSecondary: world.bgSecondary,
-    primaryColor: world.primary,
-    secondaryColor: world.secondary,
-    tertiaryColor: world.tertiary,
+    primaryColor,
+    secondaryColor,
+    tertiaryColor,
     textColor: world.text,
     mutedTextColor: world.muted,
-    borderColor: world.border,
+    borderColor,
+    avatarWeightPercent: 30,
+    avatarSwatches: avatar?.paletteSwatches || [primaryColor, secondaryColor, tertiaryColor],
+    avatarDominantHue: avatar?.dominantHue ?? (seed % 360),
     chladniN,
     chladniM,
     chladniA,
@@ -307,23 +386,22 @@ export function computeGenerativeDNA(
     hypotrochoidr,
     hypotrochoidd,
     symmetryOrder,
-    turbulence: 0.5 + (axes.rhythm / 100) * 2.0,
+    turbulence: 0.4 + (weightedEnergy / 100) * 1.6,
     frameStyle,
     topologyMode,
   }
 }
 
 /**
- * Full-Bleed Procedural Canvas Background Shader
- * Renders mathematical Chladni standing waves, flow-fields, or orbital constellations
- * unique to the user's exact numerical parameters.
+ * Full-bleed HTML5 Canvas Generative Shader
+ * Renders Chladni acoustic standing waves, flow fields, and constellation interference patterns
  */
 export const ProceduralPatternCanvas: React.FC<{
   dna: GenerativeDNA;
   axes: AxisScores;
   isBack?: boolean;
 }> = ({ dna, axes, isBack = false }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -333,99 +411,95 @@ export const ProceduralPatternCanvas: React.FC<{
 
     const w = canvas.width
     const h = canvas.height
-    const rng = createRng(dna.seed + (isBack ? 9999 : 0))
+    ctx.clearRect(0, 0, w, h)
 
     // 1. Base Gradient Fill
-    const grad = ctx.createLinearGradient(0, 0, w * 0.8, h)
-    grad.addColorStop(0, dna.bgBase)
-    grad.addColorStop(0.5, dna.bgSecondary)
-    grad.addColorStop(1, dna.bgBase)
-    ctx.fillStyle = grad
+    const bgGrad = ctx.createLinearGradient(0, 0, w, h)
+    bgGrad.addColorStop(0, dna.bgBase)
+    bgGrad.addColorStop(0.55, dna.bgSecondary)
+    bgGrad.addColorStop(1, dna.bgBase)
+    ctx.fillStyle = bgGrad
     ctx.fillRect(0, 0, w, h)
 
-    // 2. Soft Ambient Color Nebulae
-    const drawOrb = (x: number, y: number, r: number, color: string, alpha: number) => {
-      ctx.save()
-      ctx.globalAlpha = alpha
-      const radGrad = ctx.createRadialGradient(x, y, 0, x, y, r)
-      radGrad.addColorStop(0, color)
-      radGrad.addColorStop(1, 'transparent')
-      ctx.fillStyle = radGrad
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.restore()
-    }
-
-    drawOrb(
-      w * (0.2 + (axes.field / 100) * 0.6),
-      h * 0.28,
-      w * 0.65,
-      dna.primaryColor,
-      dna.isLightTheme ? 0.16 : 0.22
+    // 2. Soft Ambient Radial Aura (infused with Avatar + Persona blended colors)
+    const aura = ctx.createRadialGradient(
+      w * 0.5,
+      isBack ? h * 0.42 : h * 0.36,
+      10,
+      w * 0.5,
+      h * 0.45,
+      w * 0.78
     )
-    drawOrb(
-      w * (0.8 - (axes.density / 100) * 0.5),
-      h * 0.72,
-      w * 0.6,
-      dna.secondaryColor,
-      dna.isLightTheme ? 0.14 : 0.18
-    )
+    aura.addColorStop(0, `${dna.primaryColor}${dna.isLightTheme ? '26' : '38'}`)
+    aura.addColorStop(0.55, `${dna.secondaryColor}${dna.isLightTheme ? '16' : '22'}`)
+    aura.addColorStop(1, 'transparent')
+    ctx.fillStyle = aura
+    ctx.fillRect(0, 0, w, h)
 
-    // 3. Mathematical Topology Pattern
-    ctx.save()
-    const n = dna.chladniN
-    const m = dna.chladniM
+    // 3. Chladni Standing Wave Resonance Field:
+    // Equation: a * sin(pi * n * x) * sin(pi * m * y) + b * cos(pi * m * x) * cos(pi * n * y) = 0
+    const n = isBack ? dna.chladniM : dna.chladniN
+    const m = isBack ? dna.chladniN : dna.chladniM
     const a = dna.chladniA
     const b = dna.chladniB
 
-    if (dna.topologyMode === 'chladni' || isBack) {
-      // Chladni Resonance Contour Dots
-      ctx.fillStyle = dna.primaryColor
-      const step = 6
-      for (let py = 20; py < h - 20; py += step) {
-        for (let px = 20; px < w - 20; px += step) {
-          const nx = (px / w) * 2 - 1
-          const ny = (py / h) * 2 - 1
-          const val =
-            a * Math.sin(Math.PI * n * nx) * Math.cos(Math.PI * m * ny) +
-            b * Math.sin(Math.PI * m * nx) * Math.cos(Math.PI * n * ny)
+    ctx.save()
+    const step = 6
+    for (let py = 18; py < h - 18; py += step) {
+      for (let px = 18; px < w - 18; px += step) {
+        const nx = (px / w) * 2 - 1
+        const ny = (py / h) * 2 - 1
+        const val =
+          a * Math.sin(Math.PI * n * nx) * Math.sin(Math.PI * m * ny) +
+          b * Math.cos(Math.PI * m * nx) * Math.cos(Math.PI * n * ny)
 
-          if (Math.abs(val) < 0.16) {
-            ctx.globalAlpha = (1 - Math.abs(val) / 0.16) * (dna.isLightTheme ? 0.22 : 0.28)
-            ctx.fillRect(px, py, 1.8, 1.8)
-          }
+        const absVal = Math.abs(val)
+        if (absVal < 0.16) {
+          const alpha = (1 - absVal / 0.16) * (dna.isLightTheme ? 0.24 : 0.3)
+          ctx.fillStyle = absVal < 0.06 ? dna.primaryColor : dna.secondaryColor
+          ctx.globalAlpha = alpha
+          ctx.beginPath()
+          ctx.arc(px, py, absVal < 0.05 ? 1.5 : 0.9, 0, Math.PI * 2)
+          ctx.fill()
         }
       }
-    } else if (dna.topologyMode === 'flowfield') {
-      // Parametric Harmonic Flow Curves
-      ctx.strokeStyle = dna.primaryColor
+    }
+    ctx.restore()
+
+    // 4. Secondary Topology Layer (Flowfield / Constellation / Vortex)
+    const rng = createRng(dna.seed + (isBack ? 777 : 0))
+    ctx.save()
+
+    if (dna.topologyMode === 'flowfield' || dna.topologyMode === 'chladni') {
+      const curveCount = 26 + Math.round(axes.rhythm / 4)
       ctx.lineWidth = 1
-      const numCurves = 28 + Math.floor(axes.rhythm / 4)
-      for (let i = 0; i < numCurves; i++) {
+      for (let i = 0; i < curveCount; i++) {
+        let cx = rng() * w
+        let cy = rng() * h
+        ctx.strokeStyle = i % 3 === 0 ? dna.tertiaryColor : i % 2 === 0 ? dna.primaryColor : dna.secondaryColor
+        ctx.globalAlpha = dna.isLightTheme ? 0.15 : 0.2
         ctx.beginPath()
-        let x = rng() * w
-        let y = rng() * h
-        ctx.moveTo(x, y)
-        ctx.globalAlpha = dna.isLightTheme ? 0.14 : 0.18
-        for (let stepIdx = 0; stepIdx < 35; stepIdx++) {
+        ctx.moveTo(cx, cy)
+        for (let s = 0; s < 28; s++) {
           const angle =
-            Math.sin((x / w) * Math.PI * n) * Math.cos((y / h) * Math.PI * m) * Math.PI * dna.turbulence
-          x += Math.cos(angle) * 8
-          y += Math.sin(angle) * 8
-          ctx.lineTo(x, y)
+            Math.sin((cx / w) * Math.PI * dna.chladniN) *
+              Math.cos((cy / h) * Math.PI * dna.chladniM) *
+              Math.PI *
+              dna.turbulence
+          cx += Math.cos(angle) * 7
+          cy += Math.sin(angle) * 7
+          ctx.lineTo(cx, cy)
         }
         ctx.stroke()
       }
     } else if (dna.topologyMode === 'constellation') {
-      // Neural Star Network
-      const numNodes = 24 + Math.floor(axes.field / 3)
       const nodes: Array<{ x: number; y: number; r: number }> = []
-      for (let i = 0; i < numNodes; i++) {
+      const count = 28 + Math.round(axes.field / 4)
+      for (let i = 0; i < count; i++) {
         nodes.push({
           x: 24 + rng() * (w - 48),
           y: 24 + rng() * (h - 48),
-          r: 1.5 + rng() * 2.5,
+          r: 1.2 + rng() * 2.2,
         })
       }
       ctx.strokeStyle = dna.primaryColor
@@ -450,7 +524,6 @@ export const ProceduralPatternCanvas: React.FC<{
         ctx.fill()
       }
     } else {
-      // Vortex / Alchemical Spiral Rings
       ctx.strokeStyle = dna.primaryColor
       const cx = w / 2
       const cy = h * 0.42
@@ -484,9 +557,7 @@ export const ProceduralPatternCanvas: React.FC<{
 }
 
 /**
- * Procedural Centerpiece Spirograph / Sacred Sigil Totem
- * Replaces generic emoji with a mathematically synthesized multi-layer vector sigil
- * where curvature, petals, and rings are 100% controlled by the user's score vector.
+ * Procedural Centerpiece Spirograph / Sacred Sigil Totem with Embedded Avatar Medallion
  */
 export const ProceduralSigilCenterpiece: React.FC<{
   dna: GenerativeDNA;
@@ -494,7 +565,8 @@ export const ProceduralSigilCenterpiece: React.FC<{
   secondaryAxes?: AxisScores;
   badgeIcon: string;
   secondaryIcon?: string;
-}> = ({ dna, axes, secondaryAxes, badgeIcon, secondaryIcon }) => {
+  avatarUrl?: string;
+}> = ({ dna, axes, secondaryAxes, badgeIcon, secondaryIcon, avatarUrl }) => {
   const size = 152
   const cx = size / 2
   const cy = size / 2
@@ -509,7 +581,6 @@ export const ProceduralSigilCenterpiece: React.FC<{
     const t = (i / steps) * Math.PI * 2 * (dna.symmetryOrder % 2 === 0 ? 2 : 3)
     const x = cx + (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t)
     const y = cy + (R - r) * Math.sin(t) - d * Math.sin(((R - r) / r) * t)
-    // Scale within bounds
     const sx = cx + (x - cx) * 0.72
     const sy = cy + (y - cy) * 0.72
     spiroPoints.push(`${sx.toFixed(1)},${sy.toFixed(1)}`)
@@ -519,7 +590,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
   const polyPoints: string[] = []
   const order = dna.symmetryOrder
   for (let i = 0; i < order * 2; i++) {
-    const rad = i % 2 === 0 ? 64 : 28 + (axes.density / 100) * 18
+    const rad = i % 2 === 0 ? 66 : 30 + (axes.density / 100) * 18
     const angle = (i * Math.PI) / order - Math.PI / 2
     polyPoints.push(
       `${(cx + Math.cos(angle) * rad).toFixed(1)},${(cy + Math.sin(angle) * rad).toFixed(1)}`
@@ -529,10 +600,10 @@ export const ProceduralSigilCenterpiece: React.FC<{
   // Secondary Polygon for Fusion or contrast
   const secAxes = secondaryAxes || axes
   const diamondPoints = [
-    `${cx},${(cy - 22 - (secAxes.field / 100) * 42).toFixed(1)}`,
-    `${(cx + 22 + (secAxes.rhythm / 100) * 42).toFixed(1)},${cy}`,
-    `${cx},${(cy + 22 + (secAxes.temperature / 100) * 42).toFixed(1)}`,
-    `${(cx - 22 - (secAxes.density / 100) * 42).toFixed(1)},${cy}`,
+    `${cx},${(cy - 24 - (secAxes.field / 100) * 42).toFixed(1)}`,
+    `${(cx + 24 + (secAxes.rhythm / 100) * 42).toFixed(1)},${cy}`,
+    `${cx},${(cy + 24 + (secAxes.temperature / 100) * 42).toFixed(1)}`,
+    `${(cx - 24 - (secAxes.density / 100) * 42).toFixed(1)},${cy}`,
   ].join(' ')
 
   return (
@@ -543,20 +614,20 @@ export const ProceduralSigilCenterpiece: React.FC<{
       <svg width={size} height={size} className="overflow-visible">
         <defs>
           <radialGradient id={`sigilGlow-${dna.seed}`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={dna.primaryColor} stopOpacity={dna.isLightTheme ? '0.28' : '0.45'} />
-            <stop offset="70%" stopColor={dna.secondaryColor} stopOpacity="0.08" />
+            <stop offset="0%" stopColor={dna.primaryColor} stopOpacity={dna.isLightTheme ? '0.32' : '0.48'} />
+            <stop offset="70%" stopColor={dna.secondaryColor} stopOpacity="0.1" />
             <stop offset="100%" stopColor={dna.secondaryColor} stopOpacity="0" />
           </radialGradient>
         </defs>
 
         {/* Core Halo */}
-        <circle cx={cx} cy={cy} r={70} fill={`url(#sigilGlow-${dna.seed})`} />
+        <circle cx={cx} cy={cy} r={72} fill={`url(#sigilGlow-${dna.seed})`} />
 
         {/* Outer Degree Ticks */}
         {Array.from({ length: 24 }).map((_, i) => {
           const angle = (i / 24) * Math.PI * 2
-          const r1 = i % 3 === 0 ? 63 : 66
-          const r2 = 69
+          const r1 = i % 3 === 0 ? 64 : 67
+          const r2 = 70
           return (
             <line
               key={i}
@@ -565,7 +636,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
               x2={cx + Math.cos(angle) * r2}
               y2={cy + Math.sin(angle) * r2}
               stroke={dna.primaryColor}
-              strokeOpacity="0.5"
+              strokeOpacity="0.55"
               strokeWidth={i % 3 === 0 ? '1.5' : '0.8'}
             />
           )
@@ -575,9 +646,9 @@ export const ProceduralSigilCenterpiece: React.FC<{
         <polygon
           points={polyPoints.join(' ')}
           fill={dna.primaryColor}
-          fillOpacity={dna.isLightTheme ? '0.08' : '0.12'}
+          fillOpacity={dna.isLightTheme ? '0.09' : '0.14'}
           stroke={dna.primaryColor}
-          strokeOpacity="0.65"
+          strokeOpacity="0.7"
           strokeWidth="1.2"
         />
 
@@ -586,33 +657,69 @@ export const ProceduralSigilCenterpiece: React.FC<{
           points={spiroPoints.join(' ')}
           fill="none"
           stroke={dna.secondaryColor}
-          strokeOpacity="0.7"
-          strokeWidth="1.1"
+          strokeOpacity="0.75"
+          strokeWidth="1.15"
         />
 
         {/* 4-Axis Vector Diamond */}
         <polygon
           points={diamondPoints}
           fill={dna.tertiaryColor}
-          fillOpacity="0.14"
+          fillOpacity="0.15"
           stroke={dna.primaryColor}
           strokeWidth="1.6"
         />
 
-        {/* Center Medallion Circle */}
+        {/* Center Medallion Outer Ring */}
         <circle
           cx={cx}
           cy={cy}
-          r={22}
-          fill={dna.isLightTheme ? 'rgba(255,255,255,0.88)' : 'rgba(10,12,22,0.82)'}
+          r={27}
+          fill={dna.isLightTheme ? 'rgba(255,255,255,0.92)' : 'rgba(10,12,22,0.88)'}
           stroke={dna.primaryColor}
-          strokeWidth="1.5"
+          strokeWidth="2"
+        />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={24}
+          fill="none"
+          stroke={dna.tertiaryColor}
+          strokeOpacity="0.6"
+          strokeWidth="0.8"
+          strokeDasharray="3 2"
         />
       </svg>
 
-      {/* Center Emblem */}
+      {/* Center Portrait Medallion + Archetype Crest Seal */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        {secondaryIcon ? (
+        {avatarUrl ? (
+          <div className="relative w-12 h-12 rounded-full flex items-center justify-center">
+            <img
+              src={avatarUrl}
+              alt="Avatar Medallion"
+              className="w-11 h-11 rounded-full object-cover shadow-inner"
+              style={{ border: `1.5px solid ${dna.primaryColor}` }}
+            />
+            {/* Floating Archetype Crest Badge on bottom-right of medallion */}
+            <div
+              className="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-xs flex items-center justify-center shadow-md"
+              style={{
+                backgroundColor: dna.isLightTheme ? '#ffffff' : '#0f172a',
+                border: `1.5px solid ${dna.primaryColor}`,
+              }}
+            >
+              {secondaryIcon ? (
+                <span className="flex items-center -space-x-1 text-[11px]">
+                  <span>{badgeIcon}</span>
+                  <span>{secondaryIcon}</span>
+                </span>
+              ) : (
+                <span className="text-[12px] leading-none">{badgeIcon}</span>
+              )}
+            </div>
+          </div>
+        ) : secondaryIcon ? (
           <div className="flex items-center -space-x-1.5 filter drop-shadow-md">
             <span className="text-2xl transform -rotate-12">{badgeIcon}</span>
             <span className="text-2xl transform rotate-12">{secondaryIcon}</span>
@@ -627,7 +734,6 @@ export const ProceduralSigilCenterpiece: React.FC<{
 
 /**
  * Ornamental SVG Card Frame Overlay
- * Renders 4 distinct procedural border styles: celestial, cyber-hud, tarot-arch, alchemical-seal
  */
 export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }) => {
   return (
@@ -636,15 +742,25 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
       className="absolute inset-0 w-full h-full pointer-events-none z-10"
       fill="none"
     >
-      {/* Outer Thin Trim */}
+      {/* Outer Recessed Groove Bevel */}
       <rect
-        x="10"
-        y="10"
-        width="360"
-        height="555"
-        rx="22"
+        x="8"
+        y="8"
+        width="364"
+        height="559"
+        rx="24"
         stroke={dna.primaryColor}
-        strokeOpacity="0.38"
+        strokeOpacity="0.28"
+        strokeWidth="1.5"
+      />
+      <rect
+        x="11"
+        y="11"
+        width="358"
+        height="553"
+        rx="21"
+        stroke={dna.primaryColor}
+        strokeOpacity="0.45"
         strokeWidth="1"
       />
 
@@ -663,7 +779,6 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
 
       {dna.frameStyle === 'cyber-hud' && (
         <>
-          {/* Chamfered HUD brackets */}
           <path d="M 16 42 L 16 20 L 38 20" stroke={dna.primaryColor} strokeWidth="2.2" />
           <path d="M 364 42 L 364 20 L 342 20" stroke={dna.primaryColor} strokeWidth="2.2" />
           <path d="M 16 533 L 16 555 L 38 555" stroke={dna.primaryColor} strokeWidth="2.2" />

@@ -1,4 +1,4 @@
-/* 3D Free-Orbit Holographic Card Rendering Engine */
+/* 3D Free-Orbit Holographic Slab Rendering Engine (18px Physical Thickness) */
 
 .card-perspective-container {
   perspective: 1300px;
@@ -18,12 +18,71 @@
   transform-style: preserve-3d;
 }
 
+/* Front sits at +9px, Back sits at -9px -> 18px total physical slab thickness */
 .card-face-front {
-  transform: rotateY(0deg) translateZ(2px);
+  transform: rotateY(0deg) translateZ(9px);
 }
 
 .card-face-back {
-  transform: rotateY(180deg) translateZ(2px);
+  transform: rotateY(180deg) translateZ(9px);
+}
+
+/* 3D Extruded Slab Layer Slice */
+.card-slab-slice {
+  position: absolute;
+  inset: 0;
+  border-radius: 30px;
+  pointer-events: none;
+  transform-style: preserve-3d;
+}
+
+/* Perpendicular Spine Walls for 90-degree edge-on solidity & laser engraving */
+.card-spine-right {
+  position: absolute;
+  top: 28px;
+  bottom: 28px;
+  right: -9px;
+  width: 18px;
+  transform: rotateY(90deg);
+  transform-origin: center center;
+  pointer-events: none;
+  backface-visibility: visible;
+}
+
+.card-spine-left {
+  position: absolute;
+  top: 28px;
+  bottom: 28px;
+  left: -9px;
+  width: 18px;
+  transform: rotateY(-90deg);
+  transform-origin: center center;
+  pointer-events: none;
+  backface-visibility: visible;
+}
+
+.card-spine-top {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  top: -9px;
+  height: 18px;
+  transform: rotateX(90deg);
+  transform-origin: center center;
+  pointer-events: none;
+  backface-visibility: visible;
+}
+
+.card-spine-bottom {
+  position: absolute;
+  left: 28px;
+  right: 28px;
+  bottom: -9px;
+  height: 18px;
+  transform: rotateX(-90deg);
+  transform-origin: center center;
+  pointer-events: none;
+  backface-visibility: visible;
 }
 
 /* Holographic Iridescent Shimmer */
@@ -50,7 +109,7 @@
 .card-glare {
   background: radial-gradient(
     circle at var(--gx, 50%) var(--gy, 50%),
-    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 255, 255, 0.44) 0%,
     rgba(255, 255, 255, 0.12) 28%,
     transparent 62%
   );
@@ -60,9 +119,9 @@
   pointer-events: none;
 }
 
-/* Card Bevel & Rim Glow */
+/* Card Bevel & Deep 3D Slab Shadow */
 .card-metallic-bevel {
   box-shadow: 
-    0 28px 60px -15px rgba(0, 0, 0, 0.75),
-    0 0 35px -5px var(--card-glow, rgba(168, 85, 247, 0.25));
+    0 34px 70px -14px rgba(0, 0, 0, 0.82),
+    0 0 42px -6px var(--card-glow, rgba(168, 85, 247, 0.28));
 }

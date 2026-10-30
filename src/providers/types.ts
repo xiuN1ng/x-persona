@@ -18,11 +18,29 @@ export interface Post {
   mentions: string[];
 }
 
+export interface AvatarVisualFeatures {
+  dominantColorHex: string;
+  secondaryColorHex: string;
+  accentColorHex: string;
+  dominantHue: number;      // 0 - 360
+  secondaryHue: number;     // 0 - 360
+  luminance: number;        // 0 - 100 (0 = dark, 100 = bright)
+  saturation: number;       // 0 - 100
+  warmth: number;           // 0 - 100 (>50 warm, <50 cool)
+  contrast: number;         // 0 - 100
+  detailDensity: number;    // 0 - 100 (edge gradient complexity)
+  perceptualHash: number;   // 32-bit unsigned int from 8x8 color grid
+  paletteSwatches: string[]; // 4 hex swatches extracted from avatar
+  isExtractedFromPixels: boolean;
+}
+
 export interface Profile {
   screenName: string;
   name: string;
   description: string;
   avatarUrl: string;
+  rawAvatarUrl?: string;
+  avatarFeatures?: AvatarVisualFeatures;
   bannerUrl?: string;
   followers: number;
   following: number;

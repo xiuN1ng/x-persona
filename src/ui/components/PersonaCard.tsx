@@ -22,10 +22,133 @@ import {
   computeGenerativeDNA,
   ProceduralPatternCanvas,
   ProceduralSigilCenterpiece,
-  ProceduralFrameOverlay
+  ProceduralFrameOverlay,
+  type GenerativeDNA
 } from './GenerativeCanvas'
+import {
+  computeDeterministicAvatarFallback,
+  generateProceduralAvatarDataUrl
+} from '../../providers/avatar'
 import { XIcon } from './XIcon'
 import './HoloCard.css'
+
+/**
+ * 18px Physical 3D Extruded Metallic Slab Core
+ * Stacks 22 precision rounded Z-layers from -8.4px to +8.4px plus 4 laser-engraved perpendicular spines
+ * so the card has realistic billet metal & obsidian slab thickness when rotated at any 3D angle.
+ */
+const CardSlabThickness: React.FC<{
+  dna: GenerativeDNA;
+  rotY: number;
+  activeCode: string;
+}> = ({ dna, rotY, activeCode }) => {
+  // 22 Z-slices spanning -8.4px to +8.4px (step 0.8px)
+  const sliceCount = 22
+  const slices = Array.from({ length: sliceCount }, (_, i) => {
+    const z = -8.4 + (i / (sliceCount - 1)) * 16.8
+    const absZ = Math.abs(z)
+    const isOuterRim = absZ >= 6.4
+    const isCenterGroove = absZ <= 1.8
+    return { z, isOuterRim, isCenterGroove }
+  })
+
+  // Dynamic specular highlight position along the slab edge based on Y rotation
+  const specShift = Math.round(((Math.sin((rotY * Math.PI) / 180) + 1) / 2) * 100)
+
+  const spineGradient = `linear-gradient(90deg, 
+    ${dna.primaryColor} 0%, 
+    #f8fafc 14%, 
+    ${dna.secondaryColor} 28%, 
+    #090d16 42%, 
+    ${dna.tertiaryColor} 50%, 
+    #090d16 58%, 
+    ${dna.secondaryColor} 72%, 
+    #f8fafc 86%, 
+    ${dna.primaryColor} 100%)`
+
+  return (
+    <div className="absolute inset-0 pointer-events-none" style={{ transformStyle: 'preserve-3d' }}>
+      {/* 22 Z-stacked rounded-[30px] metallic rim slices */}
+      {slices.map((s, idx) => (
+        <div
+          key={idx}
+          className="card-slab-slice"
+          style={{
+            transform: `translateZ(${s.z.toFixed(2)}px)`,
+            background: s.isCenterGroove
+              ? `linear-gradient(${115 + specShift}deg, #090d16 0%, ${dna.tertiaryColor} 50%, #090d16 100%)`
+              : s.isOuterRim
+              ? `linear-gradient(${135 + specShift}deg, ${dna.primaryColor}, #ffffff 45%, ${dna.secondaryColor} 80%, ${dna.primaryColor})`
+              : `linear-gradient(${125 + specShift}deg, ${dna.secondaryColor} 0%, ${dna.primaryColor} 38%, #e2e8f0 52%, ${dna.secondaryColor} 100%)`,
+            border: s.isCenterGroove
+              ? `1.5px solid #090d16`
+              : `1.5px solid ${s.isOuterRim ? dna.primaryColor : dna.secondaryColor}`,
+            boxShadow:
+              idx === 0 || idx === sliceCount - 1
+                ? `inset 0 0 6px rgba(255,255,255,0.45)`
+                : undefined,
+          }}
+        />
+      ))}
+
+      {/* Right 18px Solid Metallic Spine with Laser-Etched Serial */}
+      <div
+        className="card-spine-right flex items-center justify-center overflow-hidden rounded-sm"
+        style={{
+          background: spineGradient,
+          borderTop: `1px solid ${dna.primaryColor}`,
+          borderBottom: `1px solid ${dna.primaryColor}`,
+          boxShadow: 'inset 0 0 4px rgba(0,0,0,0.7)',
+        }}
+      >
+        <span
+          className="font-mono text-[7px] font-black tracking-[0.28em] text-white/85 whitespace-nowrap select-none"
+          style={{
+            writingMode: 'vertical-rl',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+          }}
+        >
+          X·PERSONA // {activeCode} // DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()} // AVATAR 30%
+        </span>
+      </div>
+
+      {/* Left 18px Solid Metallic Spine with Laser-Etched Serial */}
+      <div
+        className="card-spine-left flex items-center justify-center overflow-hidden rounded-sm"
+        style={{
+          background: spineGradient,
+          borderTop: `1px solid ${dna.primaryColor}`,
+          borderBottom: `1px solid ${dna.primaryColor}`,
+          boxShadow: 'inset 0 0 4px rgba(0,0,0,0.7)',
+        }}
+      >
+        <span
+          className="font-mono text-[7px] font-black tracking-[0.28em] text-white/85 whitespace-nowrap select-none"
+          style={{
+            writingMode: 'vertical-rl',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+          }}
+        >
+          1-OF-1 PROCEDURAL SLAB // CHLADNI ({dna.chladniN.toFixed(1)},{dna.chladniM.toFixed(1)})
+        </span>
+      </div>
+
+      {/* Top & Bottom 18px Solid Metallic Spines */}
+      <div
+        className="card-spine-top rounded-sm"
+        style={{
+          background: `linear-gradient(0deg, ${dna.primaryColor} 0%, #f8fafc 20%, #090d16 50%, #f8fafc 80%, ${dna.primaryColor} 100%)`,
+        }}
+      />
+      <div
+        className="card-spine-bottom rounded-sm"
+        style={{
+          background: `linear-gradient(0deg, ${dna.primaryColor} 0%, #f8fafc 20%, #090d16 50%, #f8fafc 80%, ${dna.primaryColor} 100%)`,
+        }}
+      />
+    </div>
+  )
+}
 
 const INNER_ICONS: Record<string, string> = {
   INTJ: '♟️',
@@ -65,7 +188,14 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     oejtsAnswers,
     oejtsScores,
     fusionPersona,
+    ensureAvatarResolved,
   } = usePersonaStore()
+
+  useEffect(() => {
+    if (profile && (!profile.avatarUrl.startsWith('data:image/') || !profile.avatarFeatures)) {
+      ensureAvatarResolved()
+    }
+  }, [profile, ensureAvatarResolved])
 
   const cardContainerRef = useRef<HTMLDivElement>(null)
   const cardElementRef = useRef<HTMLDivElement>(null)
@@ -242,12 +372,18 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       ? innerType
       : fusionPersona?.fusionCode || `${persona.code}×${innerType}`
 
-  // Compute full Generative DNA from exact user metrics
+  const avatarFeatures =
+    profile.avatarFeatures || computeDeterministicAvatarFallback(profile.screenName)
+  const fallbackSvgAvatar = generateProceduralAvatarDataUrl(profile.screenName, avatarFeatures)
+  const resolvedAvatarUrl = profile.avatarUrl || fallbackSvgAvatar
+
+  // Compute full Generative DNA from 70% Persona Axes + 30% Avatar Visual Features
   const dna = computeGenerativeDNA(slot, activeCode, activeAxes, profile.screenName, {
     nightOwl: features?.nightOwlIndex,
     burstiness: features?.burstinessFano,
     avgChars: features?.avgCharCount,
     consistency: fusionPersona?.consistencyIndex,
+    avatarFeatures,
   })
 
   // Determine whether the viewer's current angle faces the front or back of the 3D plane
@@ -287,7 +423,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     profile: {
       screenName: profile.screenName,
       name: profile.name,
-      avatarUrl: profile.avatarUrl,
+      avatarUrl: profile.rawAvatarUrl || (profile.avatarUrl.startsWith('http') ? profile.avatarUrl : ''),
       followers: profile.followers,
       statusesCount: profile.statusesCount,
     },
@@ -380,6 +516,11 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           }
           className="card-3d-root relative w-[348px] sm:w-[380px] h-[575px] rounded-[30px] card-metallic-bevel"
         >
+          {/* 18px Physical 3D Extruded Metallic Slab Core */}
+          {!downloading && (
+            <CardSlabThickness dna={dna} rotY={rot.y} activeCode={activeCode} />
+          )}
+
           {/* Dynamic Glare & Iridescent Shimmer */}
           <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
           <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
@@ -388,7 +529,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           <div
             className="card-face-front absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
             style={{
-              border: `2px solid ${dna.borderColor}`,
+              border: `2.5px solid ${dna.borderColor}`,
+              boxShadow: `inset 0 0 18px ${dna.borderColor}`,
               color: dna.textColor,
               visibility: isShowingBack && !downloading ? 'hidden' : 'visible',
             }}
@@ -423,36 +565,56 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               </span>
             </div>
 
-            {/* USER IDENTITY ROW */}
+            {/* USER IDENTITY ROW + AVATAR COLOR WEIGHT SWATCHES */}
             <div className="relative z-10 flex items-center justify-between gap-2 my-1">
               <div className="flex items-center gap-2.5 min-w-0">
-                {profile.avatarUrl ? (
+                <div className="relative shrink-0">
                   <img
-                    src={profile.avatarUrl}
+                    src={resolvedAvatarUrl}
                     alt={profile.name}
-                    crossOrigin="anonymous"
-                    className="w-10 h-10 rounded-xl object-cover shadow-md"
-                    style={{ border: `1.5px solid ${dna.primaryColor}` }}
+                    onError={(e) => {
+                      const target = e.currentTarget
+                      if (target.src !== fallbackSvgAvatar) {
+                        target.src = fallbackSvgAvatar
+                      }
+                    }}
+                    className="w-11 h-11 rounded-xl object-cover shadow-md"
+                    style={{ border: `2px solid ${dna.primaryColor}` }}
                   />
-                ) : (
-                  <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold"
-                    style={{ backgroundColor: panelBg, color: dna.primaryColor }}
-                  >
-                    {profile.name[0]?.toUpperCase()}
+                  {/* Avatar Palette Extraction Dot Ring */}
+                  <div className="absolute -bottom-1 -right-1 flex items-center -space-x-1 bg-slate-950/90 px-1 py-0.5 rounded-full border border-white/20 shadow">
+                    {dna.avatarSwatches.slice(0, 3).map((hex, idx) => (
+                      <span
+                        key={idx}
+                        className="w-2 h-2 rounded-full border border-black/40"
+                        style={{ backgroundColor: hex }}
+                        title={`头像提取色权重 #${idx + 1}: ${hex}`}
+                      />
+                    ))}
                   </div>
-                )}
+                </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-sm truncate leading-tight">
                     {profile.name}
                   </h3>
-                  <div className="text-[11px] font-mono" style={{ color: dna.mutedTextColor }}>
-                    @{profile.screenName}
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono" style={{ color: dna.mutedTextColor }}>
+                    <span className="truncate">@{profile.screenName}</span>
+                    <span
+                      className="px-1 py-0.2 rounded text-[8px] font-bold shrink-0"
+                      style={{
+                        backgroundColor: panelBg,
+                        color: dna.primaryColor,
+                        border: `1px solid ${panelBorder}`,
+                      }}
+                      title="头像主色调、明暗度、纹理复杂度已作为 30% 权重注入卡牌生成管线"
+                    >
+                      头像权重 30%
+                    </span>
                   </div>
                 </div>
               </div>
 
-              <div className="text-right font-mono text-[9px]" style={{ color: dna.mutedTextColor }}>
+              <div className="text-right font-mono text-[9px] shrink-0" style={{ color: dna.mutedTextColor }}>
                 <div>DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()}</div>
                 <div className="font-bold" style={{ color: dna.primaryColor }}>
                   [{activeCode}]
@@ -470,6 +632,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                 }
                 badgeIcon={slot === 'inner' ? innerIcon : outerArch.badgeIcon}
                 secondaryIcon={slot === 'fusion' ? innerIcon : undefined}
+                avatarUrl={resolvedAvatarUrl}
               />
 
               <h2 className="text-2xl font-black tracking-tight mt-0.5">
@@ -594,7 +757,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           <div
             className="card-face-back absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
             style={{
-              border: `2px solid ${dna.borderColor}`,
+              border: `2.5px solid ${dna.borderColor}`,
+              boxShadow: `inset 0 0 18px ${dna.borderColor}`,
               color: dna.textColor,
               visibility: isShowingBack ? 'visible' : 'hidden',
             }}
