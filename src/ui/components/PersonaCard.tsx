@@ -1,9 +1,8 @@
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useEffect } from 'react'
 import {
   Download,
   Check,
   Copy,
-  Rotate3d,
   ChevronDown,
   ChevronUp,
   Lock,
@@ -11,17 +10,20 @@ import {
   Flame,
   LayoutGrid,
   Square,
-  Cpu
+  Cpu,
+  Move3d
 } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { usePersonaStore, type CardSlot } from '../../store/usePersonaStore'
 import { buildShareUrl, buildTweetIntentUrl } from '../../share/url-state'
 import { INNER_ARCHETYPES } from '../../persona/inner-archetypes'
+import { ProceduralBackTotem } from './ProceduralArt'
 import {
-  computeProceduralCardStyle,
-  ProceduralFrontTotem,
-  ProceduralBackTotem
-} from './ProceduralArt'
+  computeGenerativeDNA,
+  ProceduralPatternCanvas,
+  ProceduralSigilCenterpiece,
+  ProceduralFrameOverlay
+} from './GenerativeCanvas'
 import { XIcon } from './XIcon'
 import './HoloCard.css'
 
@@ -68,63 +70,152 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const cardContainerRef = useRef<HTMLDivElement>(null)
   const cardElementRef = useRef<HTMLDivElement>(null)
 
-  const [isFlipped, setIsFlipped] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
 
-  const [styleVars, setStyleVars] = useState<React.CSSProperties>({
-    transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg)',
-    '--rx': '0deg',
-    '--ry': '0deg',
-    '--gx': '50%',
-    '--gy': '50%',
-    '--ha': '115deg',
-    '--op': 0,
-  } as React.CSSProperties)
+  // Free 360-degree orbital rotation state
+  const [rot, setRot] = useState({ x: 0, y: 0 })
+  const [glare, setGlare] = useState({ gx: 50, gy: 50, ha: 115, op: 0 })
 
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!interactive || !cardContainerRef.current || downloading) return
-      const rect = cardContainerRef.current.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
+  const isDraggingRef = useRef(false)
+  const lastPointerRef = useRef({ x: 0, y: 0 })
+  const velocityRef = useRef({ vx: 0, vy: 0 })
+  const rotRef = useRef({ x: 0, y: 0 })
+  const rafRef = useRef<number | null>(null)
 
-      const normX = x / rect.width - 0.5
-      const normY = y / rect.height - 0.5
+  // Keep rotRef synced
+  useEffect(() => {
+    rotRef.current = rot
+  }, [rot])
 
-      const rotX = -normY * 22
-      const rotY = normX * 22
-      const angle = Math.atan2(normY, normX) * (180 / Math.PI) + 180
+  // Clean up animation frame
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
 
-      setStyleVars({
-        transform: `perspective(1200px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg)`,
-        '--rx': `${rotX}deg`,
-        '--ry': `${rotY}deg`,
-        '--gx': `${Math.round((x / rect.width) * 100)}%`,
-        '--gy': `${Math.round((y / rect.height) * 100)}%`,
-        '--ha': `${Math.round(angle)}deg`,
-        '--op': 0.88,
-      } as React.CSSProperties)
+  const startInertia = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+
+    const step = () => {
+      if (isDraggingRef.current) return
+      velocityRef.current.vx *= 0.92
+      velocityRef.current.vy *= 0.92
+
+      if (
+        Math.abs(velocityRef.current.vx) > 0.08 ||
+        Math.abs(velocityRef.current.vy) > 0.08
+      ) {
+        const nextY = rotRef.current.y + velocityRef.current.vx
+        const nextX = Math.max(-55, Math.min(55, rotRef.current.x + velocityRef.current.vy))
+        rotRef.current = { x: nextX, y: nextY }
+        setRot({ x: nextX, y: nextY })
+        rafRef.current = requestAnimationFrame(step)
+      } else {
+        // Gently settle X tilt toward 0 while preserving Y inspect angle
+        if (Math.abs(rotRef.current.x) > 0.5) {
+          const nextX = rotRef.current.x * 0.9
+          rotRef.current = { x: nextX, y: rotRef.current.y }
+          setRot({ x: nextX, y: rotRef.current.y })
+          rafRef.current = requestAnimationFrame(step)
+        }
+      }
+    }
+    rafRef.current = requestAnimationFrame(step)
+  }, [])
+
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!interactive || downloading) return
+      isDraggingRef.current = true
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      lastPointerRef.current = { x: e.clientX, y: e.clientY }
+      velocityRef.current = { vx: 0, vy: 0 }
+      e.currentTarget.setPointerCapture(e.pointerId)
     },
     [interactive, downloading]
   )
 
-  const handleMouseLeave = useCallback(() => {
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!interactive || !cardContainerRef.current || downloading) return
+      const rect = cardContainerRef.current.getBoundingClientRect()
+      const localX = e.clientX - rect.left
+      const localY = e.clientY - rect.top
+      const gx = Math.max(0, Math.min(100, Math.round((localX / rect.width) * 100)))
+      const gy = Math.max(0, Math.min(100, Math.round((localY / rect.height) * 100)))
+
+      if (isDraggingRef.current) {
+        const dx = e.clientX - lastPointerRef.current.x
+        const dy = e.clientY - lastPointerRef.current.y
+        lastPointerRef.current = { x: e.clientX, y: e.clientY }
+
+        const deltaY = dx * 0.65
+        const deltaX = -dy * 0.5
+
+        velocityRef.current = { vx: deltaY * 0.5, vy: deltaX * 0.5 }
+
+        const nextY = rotRef.current.y + deltaY
+        const nextX = Math.max(-60, Math.min(60, rotRef.current.x + deltaX))
+        rotRef.current = { x: nextX, y: nextY }
+        setRot({ x: nextX, y: nextY })
+        setGlare({
+          gx,
+          gy,
+          ha: Math.round(nextY * 2 + 115) % 360,
+          op: 0.9,
+        })
+      } else {
+        // Subtle hover light response without overriding user's parked Y rotation
+        const angle = Math.atan2(localY - rect.height / 2, localX - rect.width / 2) * (180 / Math.PI) + 180
+        setGlare({
+          gx,
+          gy,
+          ha: Math.round(angle),
+          op: 0.65,
+        })
+      }
+    },
+    [interactive, downloading]
+  )
+
+  const handlePointerUp = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!interactive) return
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId)
+        } catch {
+          // ignore
+        }
+        startInertia()
+      }
+    },
+    [interactive, startInertia]
+  )
+
+  const handlePointerLeave = useCallback(() => {
     if (!interactive) return
-    setStyleVars({
-      transform: 'perspective(1200px) rotateX(0deg) rotateY(0deg)',
-      '--rx': '0deg',
-      '--ry': '0deg',
-      '--gx': '50%',
-      '--gy': '50%',
-      '--ha': '115deg',
-      '--op': 0,
-    } as React.CSSProperties)
+    if (!isDraggingRef.current) {
+      setGlare((prev) => ({ ...prev, op: 0 }))
+    }
+  }, [interactive])
+
+  // Double click smoothly snaps between Front (0 deg) and Back (180 deg)
+  const handleDoubleClick = useCallback(() => {
+    if (!interactive) return
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    const normY = ((rotRef.current.y % 360) + 360) % 360
+    const isCurrentlyBack = normY > 90 && normY < 270
+    const targetY = isCurrentlyBack ? 0 : 180
+    rotRef.current = { x: 0, y: targetY }
+    setRot({ x: 0, y: targetY })
   }, [interactive])
 
   if (!profile || !persona) return null
 
-  // Resolve card data by slot
   const outerArch = persona.archetype
   const innerType = oejtsScores?.type || 'INFP'
   const innerArch = INNER_ARCHETYPES[innerType] || INNER_ARCHETYPES.INFP
@@ -151,36 +242,42 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       ? innerType
       : fusionPersona?.fusionCode || `${persona.code}×${innerType}`
 
-  // Deterministically compute card shader & palette purely from persona data
-  const styleSpec = computeProceduralCardStyle(
-    slot,
-    activeCode,
-    activeAxes,
-    profile.screenName
-  )
+  // Compute full Generative DNA from exact user metrics
+  const dna = computeGenerativeDNA(slot, activeCode, activeAxes, profile.screenName, {
+    nightOwl: features?.nightOwlIndex,
+    burstiness: features?.burstinessFano,
+    avgChars: features?.avgCharCount,
+    consistency: fusionPersona?.consistencyIndex,
+  })
+
+  // Determine whether the viewer's current angle faces the front or back of the 3D plane
+  const isShowingBack = Math.cos((rot.y * Math.PI) / 180) < 0
 
   const handleDownloadImage = async () => {
     if (!cardElementRef.current) return
     setDownloading(true)
-    setStyleVars({
-      transform: 'none',
-      '--op': 0,
-    } as React.CSSProperties)
+    const savedRot = { ...rotRef.current }
+    // Snap to flat front or flat back depending on whichever side user is currently viewing!
+    const snapY = isShowingBack ? 180 : 0
+    setRot({ x: 0, y: snapY })
+    setGlare((prev) => ({ ...prev, op: 0 }))
 
     try {
-      await new Promise((r) => setTimeout(r, 120))
+      await new Promise((r) => setTimeout(r, 150))
       const dataUrl = await toPng(cardElementRef.current, {
         cacheBust: true,
         pixelRatio: 2.5,
       })
       const link = document.createElement('a')
-      link.download = `X-Persona-${slot.toUpperCase()}-${profile.screenName}-${activeCode}.png`
+      const sideLabel = isShowingBack ? 'BACK' : 'FRONT'
+      link.download = `X-Persona-${slot.toUpperCase()}-${sideLabel}-${profile.screenName}-${activeCode}.png`
       link.href = dataUrl
       link.click()
     } catch (err) {
       console.error('Failed to export card image', err)
       alert('卡牌图片导出失败，可直接截屏保存')
     } finally {
+      setRot(savedRot)
       setDownloading(false)
     }
   }
@@ -213,7 +310,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
   const shareText =
     slot === 'outer'
-      ? `我在 X 锻造了【表世界·赛博面具卡：${outerArch.nameZh} (${persona.code})】🎴 快来看看你的推文人格卡牌：`
+      ? `我在 X 锻造了独一无二的【表世界·赛博面具卡：${outerArch.nameZh} (${persona.code})】🎴 快来看看你的推文人格卡牌：`
       : slot === 'inner'
       ? `我在 X 觉醒了【里世界·潜意识真我卡：${innerArch.nameZh} (${innerType})】🔮 看看你的内外反差：`
       : `我将表里双界人格融合，炼成了传说级【${fusionPersona?.titleZh} (${activeCode})】✨ 知行同步率 ${fusionPersona?.consistencyIndex}%：`
@@ -227,34 +324,41 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
-  // Card tags by slot
   const cardTags =
     slot === 'outer'
       ? ([
-          features ? `夜猫率 ${features.nightOwlIndex}%` : null,
-          features ? `回复比 ${features.replyRate}%` : null,
-          features && features.avgCharCount > 140 ? '深度长文派' : '高频短刀流',
-          llmOutput?.spiritAnimal?.name ? `灵兽:${llmOutput.spiritAnimal.name}` : null,
+          features ? `夜猫 ${features.nightOwlIndex}%` : null,
+          features ? `回复 ${features.replyRate}%` : null,
+          features ? `均字 ${features.avgCharCount}` : null,
+          llmOutput?.spiritAnimal?.name ? `${llmOutput.spiritAnimal.name}` : null,
         ].filter(Boolean) as string[])
       : slot === 'inner'
       ? [
           innerArch.arcanaZh,
-          oejtsScores && oejtsScores.ieNormalized > 50 ? '外倾能量源' : '内倾独处源',
-          oejtsScores && oejtsScores.snNormalized > 50 ? '直觉构建者' : '实感体验派',
+          oejtsScores && oejtsScores.ieNormalized > 50 ? '外倾共振' : '内倾深潜',
+          oejtsScores && oejtsScores.snNormalized > 50 ? '直觉构建' : '实感体验',
         ]
       : [
           fusionPersona?.alchemyClassZh || '双界同盟',
-          `知行同步 ${fusionPersona?.consistencyIndex ?? 80}%`,
-          `混沌熵值 ${fusionPersona?.entropyScore ?? 20}`,
+          `同步率 ${fusionPersona?.consistencyIndex ?? 80}%`,
+          `混沌熵 ${fusionPersona?.entropyScore ?? 20}`,
         ]
+
+  const isLight = dna.isLightTheme
+  const panelBg = isLight ? 'rgba(255, 255, 255, 0.65)' : 'rgba(8, 10, 20, 0.55)'
+  const panelBorder = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.14)'
 
   return (
     <div className="flex flex-col items-center">
-      {/* 3D PERSPECTIVE WRAPPER */}
+      {/* 3D FREE-ORBIT STAGE */}
       <div
         ref={cardContainerRef}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
+        onDoubleClick={handleDoubleClick}
         onClick={onSelect}
         className={`card-perspective-container select-none ${
           interactive ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer hover:scale-[1.02] transition-transform'
@@ -262,233 +366,266 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       >
         <div
           ref={cardElementRef}
-          style={styleVars}
-          className="card-3d-root relative w-[345px] sm:w-[380px] rounded-[32px] card-metallic-bevel"
+          style={
+            {
+              transform: downloading
+                ? 'none'
+                : `perspective(1300px) rotateX(${rot.x.toFixed(2)}deg) rotateY(${rot.y.toFixed(2)}deg)`,
+              '--gx': `${glare.gx}%`,
+              '--gy': `${glare.gy}%`,
+              '--ha': `${glare.ha}deg`,
+              '--op': glare.op,
+              '--card-glow': dna.borderColor,
+            } as React.CSSProperties
+          }
+          className="card-3d-root relative w-[348px] sm:w-[380px] h-[575px] rounded-[30px] card-metallic-bevel"
         >
-          {/* Dynamic Glare & Procedural Holo Layer */}
-          <div className="card-glare absolute inset-0 rounded-[32px] z-30 pointer-events-none" />
+          {/* Dynamic Glare & Iridescent Shimmer */}
+          <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
+          <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
+
+          {/* ==================== FRONT FACE ==================== */}
           <div
-            className={`${styleSpec.holoClass} absolute inset-0 rounded-[32px] z-20 pointer-events-none`}
-          />
+            className="card-face-front absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
+            style={{
+              border: `2px solid ${dna.borderColor}`,
+              color: dna.textColor,
+              visibility: isShowingBack && !downloading ? 'hidden' : 'visible',
+            }}
+          >
+            {/* Full-Bleed Generative Canvas Shader */}
+            <ProceduralPatternCanvas dna={dna} axes={activeAxes} isBack={false} />
 
-          {/* 3D FLIP CONTAINER */}
-          <div className={`card-flip-inner relative w-full ${isFlipped ? 'card-flip-flipped' : ''}`}>
-            {/* ==================== CARD FRONT FACE ==================== */}
-            <div
-              className="card-face-front relative w-full rounded-[32px] p-6 sm:p-7 shadow-2xl overflow-hidden flex flex-col justify-between"
-              style={{
-                minHeight: '568px',
-                background: styleSpec.bgGradientCss,
-                border: `1.5px solid ${styleSpec.borderColorCss}`,
-              }}
-            >
-              {/* Procedural geometric lattice watermark */}
-              <div className="absolute inset-0 bg-[radial-gradient(#ffffff0c_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
+            {/* Ornamental Architectural SVG Border */}
+            <ProceduralFrameOverlay dna={dna} />
 
-              {/* TOP BAR: WORLD & PROCEDURAL SEED */}
-              <div className="card-layer-content flex items-center justify-between border-b border-white/15 pb-2.5 mb-3">
-                <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-wider text-slate-200">
-                  <XIcon className="w-3 h-3 text-white" />
-                  <span>
-                    {slot === 'outer'
-                      ? 'CARD I · 表世界赛博卡'
-                      : slot === 'inner'
-                      ? 'CARD II · 里世界真我卡'
-                      : 'CARD III · 双界炼成卡'}
-                  </span>
-                </div>
-                <span
-                  className="text-[10px] font-mono px-2 py-0.5 rounded-full font-bold"
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.08)',
-                    color: styleSpec.accentColorHex,
-                    border: `1px solid ${styleSpec.borderColorCss}`,
-                  }}
-                >
+            {/* TOP BAR */}
+            <div className="relative z-10 flex items-center justify-between border-b pb-2" style={{ borderColor: panelBorder }}>
+              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-wider">
+                <XIcon className="w-3 h-3" />
+                <span>
                   {slot === 'outer'
-                    ? 'SSR · 赛博面具'
+                    ? 'WORLD I · 赛博面具'
                     : slot === 'inner'
-                    ? 'SSR · 灵魂底色'
-                    : fusionPersona?.rarity || 'UR · 炼成神装'}
+                    ? 'WORLD II · 潜意识真我'
+                    : 'WORLD III · 双界炼成'}
                 </span>
               </div>
+              <span
+                className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
+                style={{
+                  backgroundColor: panelBg,
+                  color: dna.primaryColor,
+                  border: `1px solid ${dna.borderColor}`,
+                }}
+              >
+                {dna.paletteName.split(' · ')[0]}
+              </span>
+            </div>
 
-              {/* USER MINI HEADER */}
-              <div className="card-layer-floating flex items-center justify-between gap-3 mb-1">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {profile.avatarUrl ? (
-                    <img
-                      src={profile.avatarUrl}
-                      alt={profile.name}
-                      crossOrigin="anonymous"
-                      className="w-10 h-10 rounded-xl border border-white/30 object-cover shadow-lg"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-sm font-bold text-white">
-                      {profile.name[0]?.toUpperCase()}
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <h3 className="font-bold text-white text-sm truncate leading-tight">
-                      {profile.name}
-                    </h3>
-                    <div className="text-[11px] font-mono text-slate-400">
-                      @{profile.screenName}
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right font-mono text-[9px] text-slate-400">
-                  <div>SEED #{styleSpec.patternSeed.toString(16).slice(0, 6).toUpperCase()}</div>
-                  <div style={{ color: styleSpec.accentColorHex }}>[{activeCode}]</div>
-                </div>
-              </div>
-
-              {/* PROCEDURAL SACRED TOTEM & TITLE */}
-              <div className="card-layer-emblem flex flex-col items-center text-center my-1">
-                <ProceduralFrontTotem
-                  variant={slot}
-                  axes={activeAxes}
-                  secondaryAxes={
-                    slot === 'fusion' ? fusionPersona?.innerAxesAsOuterScale : undefined
-                  }
-                  styleSpec={styleSpec}
-                  badgeIcon={slot === 'inner' ? innerIcon : outerArch.badgeIcon}
-                  secondaryIcon={slot === 'fusion' ? innerIcon : undefined}
-                />
-
-                <h2 className="text-2xl sm:text-[26px] font-black text-white tracking-tight mt-1 drop-shadow-md">
-                  {slot === 'outer'
-                    ? outerArch.nameZh
-                    : slot === 'inner'
-                    ? innerArch.nameZh
-                    : fusionPersona?.titleZh}
-                </h2>
-                <div className="text-[11px] font-mono text-slate-300 mt-0.5">
-                  {slot === 'outer'
-                    ? `${outerArch.nameEn} · [${persona.code}]`
-                    : slot === 'inner'
-                    ? `${innerArch.nameEn} · [${innerType}]`
-                    : `${fusionPersona?.titleEn} · [${activeCode}]`}
-                </div>
-              </div>
-
-              {/* QUOTE / PASSIVE SKILL BOX */}
-              <div className="card-layer-content my-2.5 p-3 rounded-2xl bg-black/35 border border-white/15 text-center backdrop-blur-md">
-                {slot === 'fusion' && fusionPersona ? (
-                  <div>
-                    <div
-                      className="text-[11px] font-bold mb-1 font-mono"
-                      style={{ color: styleSpec.accentColorHex }}
-                    >
-                      ⚡ 觉醒被动技 {fusionPersona.passiveNameZh}
-                    </div>
-                    <p className="text-[11px] text-slate-200 leading-relaxed">
-                      {fusionPersona.passiveDescZh}
-                    </p>
-                  </div>
+            {/* USER IDENTITY ROW */}
+            <div className="relative z-10 flex items-center justify-between gap-2 my-1">
+              <div className="flex items-center gap-2.5 min-w-0">
+                {profile.avatarUrl ? (
+                  <img
+                    src={profile.avatarUrl}
+                    alt={profile.name}
+                    crossOrigin="anonymous"
+                    className="w-10 h-10 rounded-xl object-cover shadow-md"
+                    style={{ border: `1.5px solid ${dna.primaryColor}` }}
+                  />
                 ) : (
-                  <p className="text-xs font-medium text-slate-100 leading-relaxed italic">
-                    “
-                    {slot === 'outer'
-                      ? llmOutput?.roast || outerArch.taglineZh
-                      : innerArch.taglineZh}
-                    ”
-                  </p>
-                )}
-              </div>
-
-              {/* TRAIT PILLS */}
-              <div className="card-layer-content flex flex-wrap justify-center gap-1.5 mb-2.5">
-                {cardTags.map((t, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 rounded-md bg-white/[0.07] border border-white/15 text-[10px] font-medium text-slate-200"
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold"
+                    style={{ backgroundColor: panelBg, color: dna.primaryColor }}
                   >
-                    {t}
-                  </span>
-                ))}
-              </div>
-
-              {/* 4 PROCEDURAL AXIS BARS */}
-              <div className="card-layer-tracks space-y-1.5 py-2.5 border-t border-white/15 text-[10px] font-mono text-slate-300">
-                {[
-                  {
-                    left: slot === 'inner' ? '内倾 I' : '广播 B',
-                    right: slot === 'inner' ? 'E 外倾' : 'C 对话',
-                    val: activeAxes.field,
-                  },
-                  {
-                    left: slot === 'inner' ? '直觉 N' : '长文 E',
-                    right: slot === 'inner' ? 'S 实感' : 'S 碎片',
-                    val: activeAxes.density,
-                  },
-                  {
-                    left: slot === 'inner' ? '理性 T' : '冷静 A',
-                    right: slot === 'inner' ? 'F 情感' : 'F 情绪',
-                    val: activeAxes.temperature,
-                  },
-                  {
-                    left: slot === 'inner' ? '判断 J' : '规律 K',
-                    right: slot === 'inner' ? 'P 知觉' : 'D 随性',
-                    val: activeAxes.rhythm,
-                  },
-                ].map((row, idx) => (
-                  <div key={idx} className="flex items-center justify-between">
-                    <span className={row.val < 50 ? 'text-white font-bold' : 'text-slate-400'}>
-                      {row.left}
-                    </span>
-                    <div className="w-36 h-1.5 bg-black/50 rounded-full overflow-hidden mx-2 border border-white/10">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          width: `${row.val}%`,
-                          background: `linear-gradient(90deg, ${styleSpec.secondaryColorHex}, ${styleSpec.accentColorHex})`,
-                        }}
-                      />
-                    </div>
-                    <span className={row.val >= 50 ? 'text-white font-bold' : 'text-slate-400'}>
-                      {row.right}
-                    </span>
+                    {profile.name[0]?.toUpperCase()}
                   </div>
-                ))}
+                )}
+                <div className="min-w-0">
+                  <h3 className="font-bold text-sm truncate leading-tight">
+                    {profile.name}
+                  </h3>
+                  <div className="text-[11px] font-mono" style={{ color: dna.mutedTextColor }}>
+                    @{profile.screenName}
+                  </div>
+                </div>
               </div>
 
-              {/* FOOTER */}
-              <div className="card-layer-content pt-2 border-t border-white/10 flex items-center justify-between text-[9px] text-slate-400 font-mono">
-                <span>xpersona.app</span>
-                <span>PROCEDURAL GEN · 1 OF 1</span>
-                <span>#{activeCode}</span>
+              <div className="text-right font-mono text-[9px]" style={{ color: dna.mutedTextColor }}>
+                <div>DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()}</div>
+                <div className="font-bold" style={{ color: dna.primaryColor }}>
+                  [{activeCode}]
+                </div>
               </div>
             </div>
 
-            {/* ==================== CARD BACK FACE (PROCEDURAL BLUEPRINT) ==================== */}
+            {/* GENERATIVE SPIROGRAPH / SACRED SIGIL CENTERPIECE */}
+            <div className="relative z-10 flex flex-col items-center text-center my-0.5">
+              <ProceduralSigilCenterpiece
+                dna={dna}
+                axes={activeAxes}
+                secondaryAxes={
+                  slot === 'fusion' ? fusionPersona?.innerAxesAsOuterScale : undefined
+                }
+                badgeIcon={slot === 'inner' ? innerIcon : outerArch.badgeIcon}
+                secondaryIcon={slot === 'fusion' ? innerIcon : undefined}
+              />
+
+              <h2 className="text-2xl font-black tracking-tight mt-0.5">
+                {slot === 'outer'
+                  ? outerArch.nameZh
+                  : slot === 'inner'
+                  ? innerArch.nameZh
+                  : fusionPersona?.titleZh}
+              </h2>
+              <div className="text-[10px] font-mono font-semibold" style={{ color: dna.mutedTextColor }}>
+                {slot === 'outer'
+                  ? `${outerArch.nameEn} · SYM-${dna.symmetryOrder}`
+                  : slot === 'inner'
+                  ? `${innerArch.nameEn} · ${innerArch.arcanaZh}`
+                  : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
+              </div>
+            </div>
+
+            {/* SIGNATURE QUOTE OR AWAKENED PASSIVE */}
             <div
-              className="card-face-back absolute inset-0 w-full rounded-[32px] p-6 sm:p-7 shadow-2xl overflow-hidden flex flex-col justify-between"
-              style={{
-                minHeight: '568px',
-                background: styleSpec.bgGradientCss,
-                border: `1.5px solid ${styleSpec.borderColorCss}`,
-              }}
+              className="relative z-10 my-1.5 p-3 rounded-2xl text-center backdrop-blur-md"
+              style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
             >
-              {/* Back Top Header */}
-              <div className="flex items-center justify-between border-b border-white/15 pb-2.5">
-                <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold text-slate-200">
-                  <Cpu className="w-3.5 h-3.5" style={{ color: styleSpec.accentColorHex }} />
-                  <span>
-                    {slot === 'outer'
-                      ? '24H CIRCADIAN & RADAR'
-                      : slot === 'inner'
-                      ? '32-RAY SOUL MANDALA'
-                      : 'DUAL-WORLD INTERFERENCE'}
-                  </span>
+              {slot === 'fusion' && fusionPersona ? (
+                <div>
+                  <div
+                    className="text-[10px] font-bold mb-0.5 font-mono"
+                    style={{ color: dna.primaryColor }}
+                  >
+                    ⚡ 觉醒被动 {fusionPersona.passiveNameZh}
+                  </div>
+                  <p className="text-[11px] leading-relaxed">
+                    {fusionPersona.passiveDescZh}
+                  </p>
                 </div>
-                <span className="text-[10px] font-mono text-slate-400">
-                  BACKPRINT #{styleSpec.patternSeed.toString(16).slice(0, 4).toUpperCase()}
+              ) : (
+                <p className="text-[11px] font-medium leading-relaxed italic">
+                  “
+                  {slot === 'outer'
+                    ? llmOutput?.roast || outerArch.taglineZh
+                    : innerArch.taglineZh}
+                  ”
+                </p>
+              )}
+            </div>
+
+            {/* TRAIT TAGS */}
+            <div className="relative z-10 flex flex-wrap justify-center gap-1.5 my-1">
+              {cardTags.map((t, i) => (
+                <span
+                  key={i}
+                  className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold"
+                  style={{
+                    backgroundColor: panelBg,
+                    border: `1px solid ${panelBorder}`,
+                    color: dna.textColor,
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+
+            {/* 4 PARAMETERIZED DIMENSION BARS */}
+            <div
+              className="relative z-10 space-y-1 pt-2 border-t text-[10px] font-mono"
+              style={{ borderColor: panelBorder }}
+            >
+              {[
+                {
+                  left: slot === 'inner' ? '内倾 I' : '广播 B',
+                  right: slot === 'inner' ? 'E 外倾' : 'C 对话',
+                  val: activeAxes.field,
+                },
+                {
+                  left: slot === 'inner' ? '直觉 N' : '长文 E',
+                  right: slot === 'inner' ? 'S 实感' : 'S 碎片',
+                  val: activeAxes.density,
+                },
+                {
+                  left: slot === 'inner' ? '理性 T' : '冷静 A',
+                  right: slot === 'inner' ? 'F 情感' : 'F 情绪',
+                  val: activeAxes.temperature,
+                },
+                {
+                  left: slot === 'inner' ? '判断 J' : '规律 K',
+                  right: slot === 'inner' ? 'P 知觉' : 'D 随性',
+                  val: activeAxes.rhythm,
+                },
+              ].map((row, idx) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <span style={{ fontWeight: row.val < 50 ? 800 : 400 }}>{row.left}</span>
+                  <div
+                    className="w-36 h-1.5 rounded-full overflow-hidden mx-2"
+                    style={{ backgroundColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)' }}
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${row.val}%`,
+                        background: `linear-gradient(90deg, ${dna.primaryColor}, ${dna.secondaryColor})`,
+                      }}
+                    />
+                  </div>
+                  <span style={{ fontWeight: row.val >= 50 ? 800 : 400 }}>{row.right}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* FOOTER */}
+            <div
+              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono"
+              style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
+            >
+              <span>CHLADNI ({dna.chladniN.toFixed(1)}, {dna.chladniM.toFixed(1)})</span>
+              <span>1 OF 1 PROCEDURAL</span>
+              <span>#{activeCode}</span>
+            </div>
+          </div>
+
+          {/* ==================== BACK FACE (VISIBLE WHEN DRAGGED PAST 90 DEG) ==================== */}
+          <div
+            className="card-face-back absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
+            style={{
+              border: `2px solid ${dna.borderColor}`,
+              color: dna.textColor,
+              visibility: isShowingBack ? 'visible' : 'hidden',
+            }}
+          >
+            {/* Generative Canvas Back Shader */}
+            <ProceduralPatternCanvas dna={dna} axes={activeAxes} isBack={true} />
+            <ProceduralFrameOverlay dna={dna} />
+
+            {/* BACK TOP HEADER */}
+            <div
+              className="relative z-10 flex items-center justify-between border-b pb-2"
+              style={{ borderColor: panelBorder }}
+            >
+              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold">
+                <Cpu className="w-3.5 h-3.5" style={{ color: dna.primaryColor }} />
+                <span>
+                  {slot === 'outer'
+                    ? '24H CIRCADIAN & RADAR'
+                    : slot === 'inner'
+                    ? '32-RAY SOUL MANDALA'
+                    : 'DUAL-WORLD INTERFERENCE'}
                 </span>
               </div>
+              <span className="text-[9px] font-mono" style={{ color: dna.mutedTextColor }}>
+                SEED #{dna.seed.toString(16).slice(0, 6).toUpperCase()}
+              </span>
+            </div>
 
-              {/* Centerpiece: Procedural Back Blueprint */}
-              <div className="my-2 flex flex-col items-center justify-center">
+            {/* CENTERPIECE BACK TOTEM */}
+            <div className="relative z-10 my-2 flex flex-col items-center justify-center">
+              <div className="p-3 rounded-full" style={{ backgroundColor: 'rgba(10, 12, 24, 0.78)' }}>
                 <ProceduralBackTotem
                   variant={slot}
                   axes={activeAxes}
@@ -497,50 +634,76 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                   }
                   hourlyDistribution={features?.hourlyDistribution}
                   oejtsAnswers={oejtsAnswers}
-                  styleSpec={styleSpec}
+                  styleSpec={{
+                    hue1: 280,
+                    hue2: 190,
+                    hue3: 45,
+                    bgGradientCss: '',
+                    borderColorCss: dna.borderColor,
+                    accentColorHex: dna.primaryColor,
+                    secondaryColorHex: dna.secondaryColor,
+                    holoClass: '',
+                    patternSeed: dna.seed,
+                  }}
                 />
-                <div className="text-center mt-3">
-                  <div className="font-mono text-xs font-bold text-white">
-                    {slot === 'outer'
-                      ? '24小时发帖生物钟与四维星轨'
-                      : slot === 'inner'
-                      ? '32道潜意识答卷光谱与荣格星盘'
-                      : '表里双界多边形干涉星盘'}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    {slot === 'outer'
-                      ? '外圈放射线代表你一天24小时的真实活跃度'
-                      : slot === 'inner'
-                      ? '外圈32道射线由你32题自评答案实时生成'
-                      : '实线为表世界推文人格，虚线为里世界潜意识真我'}
-                  </div>
+              </div>
+              <div className="text-center mt-2.5">
+                <div className="font-mono text-xs font-bold">
+                  {slot === 'outer'
+                    ? '24小时发帖生物钟与四维星轨'
+                    : slot === 'inner'
+                    ? '32道潜意识答卷光谱与荣格星盘'
+                    : '表里双界多边形干涉星盘'}
+                </div>
+                <div className="text-[10px] mt-0.5" style={{ color: dna.mutedTextColor }}>
+                  {slot === 'outer'
+                    ? '外圈24根放射脉冲由你一天24小时的真实发推分布生成'
+                    : slot === 'inner'
+                    ? '外圈32道射线由你32题自评答案(1-5分)实时映射'
+                    : '实线为表世界推文人格，虚线为里世界潜意识真我'}
                 </div>
               </div>
+            </div>
 
-              {/* Back Data Matrix */}
+            {/* BACK DATA PANELS */}
+            <div className="relative z-10">
               {slot === 'outer' && features && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 rounded-xl bg-black/40 border border-white/10">
-                    <div className="text-slate-400 text-[10px]">脉冲爆发度 (Fano)</div>
-                    <div className="text-sm font-bold font-mono text-white">
-                      {features.burstinessFano}
+                  <div
+                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                  >
+                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
+                      脉冲爆发度 (Fano)
                     </div>
+                    <div className="text-sm font-bold font-mono">{features.burstinessFano}</div>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-black/40 border border-white/10">
-                    <div className="text-slate-400 text-[10px]">深夜活跃 (0-6点)</div>
-                    <div className="text-sm font-bold font-mono text-white">
-                      {features.nightOwlIndex}%
+                  <div
+                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                  >
+                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
+                      深夜活跃 (0-6点)
                     </div>
+                    <div className="text-sm font-bold font-mono">{features.nightOwlIndex}%</div>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-black/40 border border-white/10">
-                    <div className="text-slate-400 text-[10px]">单篇平均字数</div>
-                    <div className="text-sm font-bold font-mono text-white">
-                      {features.avgCharCount} 字
+                  <div
+                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                  >
+                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
+                      单篇平均字数
                     </div>
+                    <div className="text-sm font-bold font-mono">{features.avgCharCount} 字</div>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-black/40 border border-white/10">
-                    <div className="text-slate-400 text-[10px]">原创 / 回复占比</div>
-                    <div className="text-sm font-bold font-mono text-white">
+                  <div
+                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                  >
+                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
+                      原创 / 回复占比
+                    </div>
+                    <div className="text-sm font-bold font-mono">
                       {features.originalRate}% / {features.replyRate}%
                     </div>
                   </div>
@@ -549,84 +712,104 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
               {slot === 'inner' && (
                 <div className="space-y-2 text-xs">
-                  <div className="p-3 rounded-xl bg-black/40 border border-white/10">
-                    <div className="text-[10px] font-mono text-purple-300 mb-0.5">
+                  <div
+                    className="p-3 rounded-xl backdrop-blur-md"
+                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                  >
+                    <div className="text-[10px] font-mono font-bold mb-0.5" style={{ color: dna.primaryColor }}>
                       ✦ 灵魂核心渴望 (Core Desire)
                     </div>
-                    <div className="text-slate-200 text-[11px]">{innerArch.coreDesireZh}</div>
+                    <div className="text-[11px]">{innerArch.coreDesireZh}</div>
                   </div>
-                  <div className="p-3 rounded-xl bg-black/40 border border-white/10">
-                    <div className="text-[10px] font-mono text-rose-300 mb-0.5">
+                  <div
+                    className="p-3 rounded-xl backdrop-blur-md"
+                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                  >
+                    <div className="text-[10px] font-mono font-bold mb-0.5" style={{ color: dna.secondaryColor }}>
                       🌑 潜意识暗影 (Shadow Side)
                     </div>
-                    <div className="text-slate-200 text-[11px]">{innerArch.shadowZh}</div>
+                    <div className="text-[11px]">{innerArch.shadowZh}</div>
                   </div>
                 </div>
               )}
 
               {slot === 'fusion' && fusionPersona && (
-                <div className="p-3.5 rounded-2xl bg-black/40 border border-white/15 space-y-2 text-xs">
-                  <div className="flex items-center justify-between font-mono text-[11px]">
-                    <span className="text-amber-300 font-bold">
-                      ⚗️ 炼成公式: [{persona.code}] ⊗ [{innerType}]
+                <div
+                  className="p-3.5 rounded-2xl backdrop-blur-md space-y-1.5 text-xs"
+                  style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+                >
+                  <div className="flex items-center justify-between font-mono text-[11px] font-bold">
+                    <span style={{ color: dna.primaryColor }}>
+                      ⚗️ [{persona.code}] ⊗ [{innerType}]
                     </span>
-                    <span className="text-emerald-300">
+                    <span style={{ color: dna.secondaryColor }}>
                       同步率 {fusionPersona.consistencyIndex}%
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-200 leading-relaxed">
-                    {fusionPersona.loreZh}
-                  </p>
+                  <p className="text-[11px] leading-relaxed">{fusionPersona.loreZh}</p>
                 </div>
               )}
+            </div>
 
-              {/* Back Footer */}
-              <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[9px] text-slate-400 font-mono">
-                <span>UNIQUE PROCEDURAL BACKPRINT</span>
-                <span>@{profile.screenName}</span>
-              </div>
+            {/* BACK FOOTER */}
+            <div
+              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono"
+              style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
+            >
+              <span>PROCEDURAL BACKPRINT</span>
+              <span>@{profile.screenName}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Individual Card Controls (Only shown in single-card view) */}
+      {/* 360 DRAG TELEMETRY & EXPORT CONTROLS */}
       {interactive && (
-        <div className="flex flex-wrap items-center justify-center gap-2 mt-5 w-full max-w-[380px]">
-          <button
-            onClick={() => setIsFlipped(!isFlipped)}
-            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <Rotate3d className="w-4 h-4 text-purple-400" />
-            <span>{isFlipped ? '翻回正面' : '翻转看程序化卡背'}</span>
-          </button>
+        <div className="w-full max-w-[380px] mt-4 space-y-3">
+          {/* Interactive Drag Telemetry Bar */}
+          <div className="px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+            <span className="flex items-center gap-1.5 text-purple-300">
+              <Move3d className="w-3.5 h-3.5" />
+              <span>按住卡牌任意拖动 360° 观察正反面</span>
+            </span>
+            <span className="text-slate-500">
+              {isShowingBack ? '背面' : '正面'} ({Math.round(((rot.y % 360) + 360) % 360)}°)
+            </span>
+          </div>
 
-          <button
-            onClick={handleDownloadImage}
-            disabled={downloading}
-            className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>{downloading ? '锻造高分图中...' : '保存此卡 (PNG)'}</span>
-          </button>
+          {/* Export & Share Buttons */}
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={handleDownloadImage}
+              disabled={downloading}
+              className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>
+                {downloading
+                  ? '正在渲染高清卡牌...'
+                  : `保存当前${isShowingBack ? '卡背' : '卡面'} (PNG)`}
+              </span>
+            </button>
 
-          <a
-            href={tweetIntentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors"
-          >
-            <XIcon className="w-3.5 h-3.5" />
-            <span>晒卡</span>
-          </a>
+            <a
+              href={tweetIntentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors"
+            >
+              <XIcon className="w-3.5 h-3.5" />
+              <span>晒卡</span>
+            </a>
 
-          <button
-            onClick={handleCopyLink}
-            className="px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer"
-            title="复制链接"
-          >
-            {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-          </button>
+            <button
+              onClick={handleCopyLink}
+              className="px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer"
+              title="复制链接"
+            >
+              {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -658,9 +841,9 @@ export const PersonaCard: React.FC = () => {
   const canFuse = hasInnerCard && !isFused
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-4 flex flex-col items-center">
+    <div className="w-full max-w-6xl mx-auto px-4 py-2 flex flex-col items-center">
       {/* ==================== 3-CARD DECK SLOT SELECTOR ==================== */}
-      <div className="w-full max-w-2xl mb-6">
+      <div className="w-full max-w-2xl mb-5">
         <div className="grid grid-cols-3 gap-2.5 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
           {/* SLOT 1: OUTER CYBER CARD */}
           <button
@@ -796,11 +979,11 @@ export const PersonaCard: React.FC = () => {
           </button>
         </div>
 
-        {/* Sub-bar: Procedural Engine Notice + Trinity View Toggle */}
-        <div className="flex items-center justify-between mt-2.5 px-2 text-[11px] text-slate-400">
+        {/* Sub-bar */}
+        <div className="flex items-center justify-between mt-2 px-2 text-[11px] text-slate-400">
           <div className="flex items-center gap-1.5 font-mono">
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>程序化渲染管线：卡面与卡背均由人格特征向量 100% 唯一生成</span>
+            <span>克拉尼驻波(Chladni) + 旋轮线(Hypotrochoid) 实时参数化生成</span>
           </div>
 
           {hasInnerCard && (
@@ -811,7 +994,7 @@ export const PersonaCard: React.FC = () => {
               {showTrinityGallery ? (
                 <>
                   <Square className="w-3.5 h-3.5 text-purple-400" />
-                  <span>返回单卡3D检视</span>
+                  <span>返回单卡360°把玩</span>
                 </>
               ) : (
                 <>
@@ -824,7 +1007,7 @@ export const PersonaCard: React.FC = () => {
         </div>
       </div>
 
-      {/* ==================== FUSION RITUAL ANIMATION OVERLAY ==================== */}
+      {/* ==================== FUSION RITUAL OVERLAY ==================== */}
       {isFusingAnimation && (
         <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex flex-col items-center justify-center">
           <div className="relative w-44 h-44 flex items-center justify-center">
@@ -836,14 +1019,14 @@ export const PersonaCard: React.FC = () => {
             正在融合【表世界·{persona.code}】与【里世界·{oejtsScores?.type}】...
           </h3>
           <p className="text-xs font-mono text-amber-300 mt-2">
-            SYNTHESIZING PROCEDURAL TOTEM & ALCHEMICAL MATRIX
+            GENERATING CHLADNI INTERFERENCE & SPIROGRAPH TOTEM
           </p>
         </div>
       )}
 
-      {/* ==================== PROMINENT FUSION CALLOUT BANNER ==================== */}
+      {/* ==================== PROMINENT FUSION CALLOUT ==================== */}
       {canFuse && !isFusingAnimation && (
-        <div className="w-full max-w-md mb-6 p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-amber-950/80 to-cyan-950/90 border border-amber-400/60 shadow-2xl flex items-center justify-between gap-4">
+        <div className="w-full max-w-md mb-5 p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-amber-950/80 to-cyan-950/90 border border-amber-400/60 shadow-2xl flex items-center justify-between gap-4">
           <div>
             <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4" />
@@ -862,9 +1045,9 @@ export const PersonaCard: React.FC = () => {
         </div>
       )}
 
-      {/* ==================== MAIN DISPLAY: TRINITY GALLERY OR SINGLE 3D CARD ==================== */}
+      {/* ==================== MAIN DISPLAY ==================== */}
       {showTrinityGallery ? (
-        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-start justify-items-center py-4">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-3 gap-6 items-start justify-items-center py-2">
           <div className="flex flex-col items-center">
             <div className="text-xs font-mono text-purple-400 font-bold mb-2">
               【卡 I · 表世界赛博面具】
@@ -901,7 +1084,7 @@ export const PersonaCard: React.FC = () => {
               />
             </div>
           ) : (
-            <div className="w-[345px] min-h-[568px] rounded-[32px] border-2 border-dashed border-amber-500/40 bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center">
+            <div className="w-[348px] h-[575px] rounded-[30px] border-2 border-dashed border-amber-500/40 bg-slate-900/40 flex flex-col items-center justify-center p-8 text-center">
               <Flame className="w-12 h-12 text-amber-400 mb-3 animate-pulse" />
               <div className="text-base font-bold text-white mb-1">
                 第 3 张：双界融合卡待锻造
@@ -923,7 +1106,7 @@ export const PersonaCard: React.FC = () => {
       )}
 
       {/* ==================== COLLAPSIBLE RAW STATS DRAWER ==================== */}
-      <div className="w-full max-w-[380px] mt-6">
+      <div className="w-full max-w-[380px] mt-5">
         <button
           onClick={() => setShowDetails(!showDetails)}
           className="w-full py-2.5 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center justify-between transition-colors cursor-pointer"

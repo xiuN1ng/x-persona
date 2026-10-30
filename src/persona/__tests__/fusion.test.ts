@@ -3,9 +3,10 @@ import { fusePersonas } from '../fusion-engine'
 import { determineArchetype } from '../axes'
 import { scoreOejts, comparePersonas } from '../../oejts/scoring'
 import { computeProceduralCardStyle } from '../../ui/components/ProceduralArt'
+import { computeGenerativeDNA } from '../../ui/components/GenerativeCanvas'
 
 describe('Dual-World Card Fusion & Procedural Style Engine', () => {
-  it('deterministically synthesizes Card III (Fusion Card) from Card I and Card II', () => {
+  it('deterministically synthesizes Card III (Fusion Card) and 1-of-1 Generative DNA from numeric vectors', () => {
     const outerAxes = { field: 29, density: 37, temperature: 72, rhythm: 85 }
     const outerPersona = determineArchetype(outerAxes) // BEFD
 
@@ -35,5 +36,15 @@ describe('Dual-World Card Fusion & Procedural Style Engine', () => {
     expect(style1).toEqual(style1Repeat)
     expect(style1.bgGradientCss).not.toEqual(style2.bgGradientCss)
     expect(style3.bgGradientCss).not.toEqual(style1.bgGradientCss)
+
+    // Verify Chladni & Spirograph Generative DNA produces unique mathematical signatures per numeric change
+    const dna1 = computeGenerativeDNA('outer', outerPersona.code, outerAxes, 'coldmountainlab')
+    const dna2 = computeGenerativeDNA('outer', outerPersona.code, { ...outerAxes, density: 88, temperature: 19 }, 'coldmountainlab')
+    const dna3 = computeGenerativeDNA('fusion', fusion.fusionCode, fusion.fusedAxes, 'coldmountainlab', [29, 37, 72, 85, 62, 74, 68, 70])
+
+    expect(dna1.seed).not.toEqual(dna2.seed)
+    expect(dna1.chladniM).not.toEqual(dna2.chladniM)
+    expect(dna1.hypotrochoidr).not.toEqual(dna2.hypotrochoidr)
+    expect(dna3.seed).toBeGreaterThan(0)
   })
 })
