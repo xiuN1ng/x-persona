@@ -10,18 +10,17 @@ import {
   Flame,
   LayoutGrid,
   Square,
-  Cpu,
   Move3d
 } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { usePersonaStore, type CardSlot } from '../../store/usePersonaStore'
 import { buildShareUrl, buildTweetIntentUrl } from '../../share/url-state'
 import { INNER_ARCHETYPES } from '../../persona/inner-archetypes'
-import { ProceduralBackTotem } from './ProceduralArt'
 import {
   computeGenerativeDNA,
   ProceduralPatternCanvas,
   ProceduralSigilCenterpiece,
+  ProceduralLuxuryCardBack,
   ProceduralFrameOverlay,
   type GenerativeDNA
 } from './GenerativeCanvas'
@@ -190,7 +189,6 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     persona,
     features,
     llmOutput,
-    oejtsAnswers,
     oejtsScores,
     fusionPersona,
     ensureAvatarResolved,
@@ -465,28 +463,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
-  const cardTags =
-    slot === 'outer'
-      ? ([
-          features ? `夜猫 ${features.nightOwlIndex}%` : null,
-          features ? `回复 ${features.replyRate}%` : null,
-          features ? `均字 ${features.avgCharCount}` : null,
-          llmOutput?.spiritAnimal?.name ? `${llmOutput.spiritAnimal.name}` : null,
-        ].filter(Boolean) as string[])
-      : slot === 'inner'
-      ? [
-          innerArch.arcanaZh,
-          oejtsScores && oejtsScores.ieNormalized > 50 ? '外倾共振' : '内倾深潜',
-          oejtsScores && oejtsScores.snNormalized > 50 ? '直觉构建' : '实感体验',
-        ]
-      : [
-          fusionPersona?.alchemyClassZh || '双界同盟',
-          `同步率 ${fusionPersona?.consistencyIndex ?? 80}%`,
-          `混沌熵 ${fusionPersona?.entropyScore ?? 20}`,
-        ]
-
   const isLight = dna.isLightTheme
-  const panelBg = isLight ? 'rgba(255, 255, 255, 0.78)' : 'rgba(8, 12, 24, 0.74)'
   const panelBorder = isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)'
   const cosY = Math.cos((rot.y * Math.PI) / 180)
   const isEdgeOn = Math.abs(cosY) < 0.14
@@ -532,105 +509,41 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           <div
             className="card-face-front absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
             style={{
-              border: `2.5px solid ${dna.borderColor}`,
+              border: `2px solid ${dna.borderColor}`,
               color: dna.textColor,
               display: downloading && isShowingBack ? 'none' : 'flex',
               transform: downloading ? 'none' : undefined,
             }}
           >
-            {/* Full-Bleed Generative Canvas Shader */}
+            {/* Ambient Luxury Surface & Glow */}
             <ProceduralPatternCanvas dna={dna} axes={activeAxes} isBack={false} />
 
-            {/* Ornamental Architectural SVG Border */}
+            {/* Fine Architectural Hairline Frame */}
             <ProceduralFrameOverlay dna={dna} />
 
             {/* Specular Glare & Iridescent Shimmer inside 2D face */}
             <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
             <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
 
-            {/* TOP BAR */}
-            <div className="relative z-10 flex items-center justify-between border-b pb-2" style={{ borderColor: panelBorder }}>
-              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-wider">
-                <XIcon className="w-3 h-3" />
-                <span>
-                  {slot === 'outer'
-                    ? 'WORLD I · 赛博面具'
-                    : slot === 'inner'
-                    ? 'WORLD II · 潜意识真我'
-                    : 'WORLD III · 双界炼成'}
-                </span>
-              </div>
-              <span
-                className="text-[9px] font-mono px-2 py-0.5 rounded-full font-bold"
-                style={{
-                  backgroundColor: panelBg,
-                  color: dna.primaryColor,
-                  border: `1px solid ${dna.borderColor}`,
-                }}
-              >
-                {dna.paletteName.split(' · ')[0]}
+            {/* MINIMALIST EDITORIAL TOP BAR */}
+            <div
+              className="relative z-10 flex items-center justify-between px-1 pt-0.5 text-[10px] font-mono tracking-[0.18em]"
+              style={{ color: dna.mutedTextColor }}
+            >
+              <span className="font-semibold">
+                {slot === 'outer'
+                  ? 'I · CYBER PERSONA'
+                  : slot === 'inner'
+                  ? 'II · SOUL ARCHETYPE'
+                  : 'III · ALCHEMICAL FUSION'}
+              </span>
+              <span className="font-bold tracking-[0.22em]" style={{ color: dna.primaryColor }}>
+                {activeCode.split('').join('·')}
               </span>
             </div>
 
-            {/* USER IDENTITY ROW + AVATAR COLOR WEIGHT SWATCHES */}
-            <div className="relative z-10 flex items-center justify-between gap-2 my-1">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="relative shrink-0">
-                  <img
-                    src={resolvedAvatarUrl}
-                    alt={profile.name}
-                    onError={(e) => {
-                      const target = e.currentTarget
-                      if (target.src !== fallbackSvgAvatar) {
-                        target.src = fallbackSvgAvatar
-                      }
-                    }}
-                    className="w-11 h-11 rounded-xl object-cover shadow-md"
-                    style={{ border: `2px solid ${dna.primaryColor}` }}
-                  />
-                  {/* Avatar Palette Extraction Dot Ring */}
-                  <div className="absolute -bottom-1 -right-1 flex items-center -space-x-1 bg-slate-950/90 px-1 py-0.5 rounded-full border border-white/20 shadow">
-                    {dna.avatarSwatches.slice(0, 3).map((hex, idx) => (
-                      <span
-                        key={idx}
-                        className="w-2 h-2 rounded-full border border-black/40"
-                        style={{ backgroundColor: hex }}
-                        title={`头像提取色权重 #${idx + 1}: ${hex}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-sm truncate leading-tight">
-                    {profile.name}
-                  </h3>
-                  <div className="flex items-center gap-1.5 text-[10px] font-mono" style={{ color: dna.mutedTextColor }}>
-                    <span className="truncate">@{profile.screenName}</span>
-                    <span
-                      className="px-1 py-0.2 rounded text-[8px] font-bold shrink-0"
-                      style={{
-                        backgroundColor: panelBg,
-                        color: dna.primaryColor,
-                        border: `1px solid ${panelBorder}`,
-                      }}
-                      title="头像主色调、明暗度、纹理复杂度已作为 30% 权重注入卡牌生成管线"
-                    >
-                      头像权重 30%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-right font-mono text-[9px] shrink-0" style={{ color: dna.mutedTextColor }}>
-                <div>DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()}</div>
-                <div className="font-bold" style={{ color: dna.primaryColor }}>
-                  [{activeCode}]
-                </div>
-              </div>
-            </div>
-
-            {/* GENERATIVE SPIROGRAPH / SACRED SIGIL CENTERPIECE */}
-            <div className="relative z-10 flex flex-col items-center text-center my-0.5">
+            {/* HERO STAGE: FRAMED SACRED ROSE MANDALA & PORTRAIT MEDALLION */}
+            <div className="relative z-10 flex flex-col items-center justify-center my-1">
               <ProceduralSigilCenterpiece
                 dna={dna}
                 axes={activeAxes}
@@ -642,41 +555,56 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                 avatarUrl={resolvedAvatarUrl}
               />
 
-              <h2 className="text-2xl font-black tracking-tight mt-0.5">
-                {slot === 'outer'
-                  ? outerArch.nameZh
-                  : slot === 'inner'
-                  ? innerArch.nameZh
-                  : fusionPersona?.titleZh}
-              </h2>
-              <div className="text-[10px] font-mono font-semibold" style={{ color: dna.mutedTextColor }}>
-                {slot === 'outer'
-                  ? `${outerArch.nameEn} · SYM-${dna.symmetryOrder}`
-                  : slot === 'inner'
-                  ? `${innerArch.nameEn} · ${innerArch.arcanaZh}`
-                  : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
+              {/* EDITORIAL TITLE & USER IDENTITY */}
+              <div className="mt-2 text-center">
+                <h2 className="text-[24px] font-black tracking-wider leading-tight">
+                  {slot === 'outer'
+                    ? outerArch.nameZh
+                    : slot === 'inner'
+                    ? innerArch.nameZh
+                    : fusionPersona?.titleZh}
+                </h2>
+                <div
+                  className="text-[10px] font-mono uppercase tracking-[0.2em] mt-0.5 font-medium"
+                  style={{ color: dna.primaryColor }}
+                >
+                  {slot === 'outer'
+                    ? outerArch.nameEn
+                    : slot === 'inner'
+                    ? `${innerArch.nameEn} · ${innerArch.arcanaZh}`
+                    : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
+                </div>
+                <div
+                  className="text-[11px] font-mono mt-1"
+                  style={{ color: dna.mutedTextColor }}
+                >
+                  {profile.name} <span className="opacity-70">@{profile.screenName}</span>
+                </div>
               </div>
             </div>
 
-            {/* SIGNATURE QUOTE OR AWAKENED PASSIVE (no backdrop-filter so preserve-3d never flattens) */}
+            {/* POETIC ESSENCE / AWAKENED PASSIVE */}
             <div
-              className="relative z-10 my-1.5 p-3 rounded-2xl text-center"
-              style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+              className="relative z-10 px-3.5 py-2.5 rounded-xl text-center"
+              style={{
+                backgroundColor: dna.surfaceBg,
+                border: `1px solid ${panelBorder}`,
+              }}
             >
               {slot === 'fusion' && fusionPersona ? (
                 <div>
                   <div
-                    className="text-[10px] font-bold mb-0.5 font-mono"
+                    className="text-[10px] font-bold mb-0.5 font-mono tracking-wider"
                     style={{ color: dna.primaryColor }}
                   >
-                    ⚡ 觉醒被动 {fusionPersona.passiveNameZh}
+                    ✦ {fusionPersona.passiveNameZh}
                   </div>
-                  <p className="text-[11px] leading-relaxed">
+                  <p className="text-[11px] leading-relaxed line-clamp-2">
                     {fusionPersona.passiveDescZh}
                   </p>
                 </div>
               ) : (
-                <p className="text-[11px] font-medium leading-relaxed italic">
+                <p className="text-[11px] leading-relaxed italic line-clamp-2">
                   “
                   {slot === 'outer'
                     ? llmOutput?.roast || outerArch.taglineZh
@@ -686,26 +614,9 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               )}
             </div>
 
-            {/* TRAIT TAGS */}
-            <div className="relative z-10 flex flex-wrap justify-center gap-1.5 my-1">
-              {cardTags.map((t, i) => (
-                <span
-                  key={i}
-                  className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold"
-                  style={{
-                    backgroundColor: panelBg,
-                    border: `1px solid ${panelBorder}`,
-                    color: dna.textColor,
-                  }}
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-
-            {/* 4 PARAMETERIZED DIMENSION BARS */}
+            {/* SLEEK 4-AXIS SPECTRUM BARS */}
             <div
-              className="relative z-10 space-y-1 pt-2 border-t text-[10px] font-mono"
+              className="relative z-10 space-y-1.5 pt-2.5 border-t text-[10px] font-mono"
               style={{ borderColor: panelBorder }}
             >
               {[
@@ -730,239 +641,83 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                   val: activeAxes.rhythm,
                 },
               ].map((row, idx) => (
-                <div key={idx} className="flex items-center justify-between">
-                  <span style={{ fontWeight: row.val < 50 ? 800 : 400 }}>{row.left}</span>
+                <div key={idx} className="flex items-center justify-between gap-2">
+                  <span
+                    className="w-12 text-left"
+                    style={{
+                      fontWeight: row.val < 50 ? 700 : 400,
+                      color: row.val < 50 ? dna.textColor : dna.mutedTextColor,
+                    }}
+                  >
+                    {row.left}
+                  </span>
                   <div
-                    className="w-36 h-1.5 rounded-full overflow-hidden mx-2"
-                    style={{ backgroundColor: isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.12)' }}
+                    className="flex-1 h-1 rounded-full overflow-hidden"
+                    style={{
+                      backgroundColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)',
+                    }}
                   >
                     <div
                       className="h-full rounded-full"
                       style={{
                         width: `${row.val}%`,
-                        background: `linear-gradient(90deg, ${dna.primaryColor}, ${dna.secondaryColor})`,
+                        background: `linear-gradient(90deg, ${dna.primaryColor}, ${dna.foilColor})`,
                       }}
                     />
                   </div>
-                  <span style={{ fontWeight: row.val >= 50 ? 800 : 400 }}>{row.right}</span>
+                  <span
+                    className="w-12 text-right"
+                    style={{
+                      fontWeight: row.val >= 50 ? 700 : 400,
+                      color: row.val >= 50 ? dna.textColor : dna.mutedTextColor,
+                    }}
+                  >
+                    {row.right}
+                  </span>
                 </div>
               ))}
             </div>
 
-            {/* FOOTER */}
+            {/* REFINED MINIMAL FOOTER */}
             <div
-              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono"
+              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono tracking-widest px-0.5"
               style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
             >
-              <span>CHLADNI ({dna.chladniN.toFixed(1)}, {dna.chladniM.toFixed(1)})</span>
-              <span>1 OF 1 PROCEDURAL</span>
-              <span>#{activeCode}</span>
+              <span>X PERSONA</span>
+              <span>No.{dna.seed.toString(16).slice(0, 6).toUpperCase()}</span>
             </div>
           </div>
 
-          {/* ==================== BACK FACE (Z = -10px, VISIBLE PAST 90 DEG) ==================== */}
+          {/* ==================== BACK FACE (Z = -10px, SYMMETRICAL SACRED CARD BACK) ==================== */}
           <div
-            className="card-face-back absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
+            className="card-face-back absolute inset-0 w-full h-full rounded-[30px] overflow-hidden"
             style={{
-              border: `2.5px solid ${dna.borderColor}`,
+              border: `2px solid ${dna.borderColor}`,
               color: dna.textColor,
-              display: downloading && !isShowingBack ? 'none' : 'flex',
+              display: downloading && !isShowingBack ? 'none' : 'block',
               transform: downloading ? 'none' : undefined,
             }}
           >
-            {/* Full-Bleed 1-of-1 Generative Card Back Artwork (Chladni Damascus + Guilloché Rosettes + Lissajous + 24h Sunburst) */}
+            {/* Ambient Luxury Surface */}
             <ProceduralPatternCanvas
               dna={dna}
               axes={activeAxes}
               isBack={true}
               hourlyDistribution={features?.hourlyDistribution}
             />
-            <ProceduralFrameOverlay dna={dna} />
+
+            {/* Full-Bleed Symmetrical Collectible Card Back Artwork */}
+            <ProceduralLuxuryCardBack
+              dna={dna}
+              activeCode={activeCode}
+              handle={profile.screenName}
+              slot={slot}
+              hourlyDistribution={features?.hourlyDistribution}
+            />
 
             {/* Specular Glare & Iridescent Shimmer inside 2D back face */}
             <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
             <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
-
-            {/* BACK TOP HEADER */}
-            <div
-              className="relative z-10 flex items-center justify-between border-b pb-2"
-              style={{ borderColor: panelBorder }}
-            >
-              <div className="flex items-center gap-1.5 font-mono text-[10px] font-bold">
-                <Cpu className="w-3.5 h-3.5" style={{ color: dna.primaryColor }} />
-                <span>
-                  {slot === 'outer'
-                    ? '1-OF-1 CHLADNI & CIRCADIAN TOTEM'
-                    : slot === 'inner'
-                    ? '1-OF-1 32-RAY SOUL MANDALA'
-                    : '1-OF-1 DUAL-WORLD ALCHEMICAL SEAL'}
-                </span>
-              </div>
-              <span className="text-[9px] font-mono font-bold" style={{ color: dna.primaryColor }}>
-                SEED #{dna.seed.toString(16).slice(0, 6).toUpperCase()}
-              </span>
-            </div>
-
-            {/* CENTERPIECE 1-OF-1 PROCEDURAL BACK MANDALA / TOTEM */}
-            <div className="relative z-10 my-1 flex flex-col items-center justify-center">
-              <div
-                className="p-3 rounded-full"
-                style={{
-                  backgroundColor: isLight ? 'rgba(255, 255, 255, 0.55)' : 'rgba(8, 12, 24, 0.55)',
-                  border: `1.5px solid ${dna.borderColor}`,
-                }}
-              >
-                <ProceduralBackTotem
-                  variant={slot}
-                  axes={activeAxes}
-                  secondaryAxes={
-                    slot === 'fusion' ? fusionPersona?.innerAxesAsOuterScale : undefined
-                  }
-                  hourlyDistribution={features?.hourlyDistribution}
-                  oejtsAnswers={oejtsAnswers}
-                  styleSpec={{
-                    hue1: 280,
-                    hue2: 190,
-                    hue3: 45,
-                    bgGradientCss: '',
-                    borderColorCss: dna.borderColor,
-                    accentColorHex: dna.primaryColor,
-                    secondaryColorHex: dna.secondaryColor,
-                    holoClass: '',
-                    patternSeed: dna.seed,
-                  }}
-                />
-              </div>
-              <div className="text-center mt-2">
-                <div className="font-mono text-xs font-bold">
-                  {slot === 'outer'
-                    ? '专属克拉尼驻波 · 24h生物钟星轨图腾'
-                    : slot === 'inner'
-                    ? '专属旋轮曼陀罗 · 32道潜意识光谱图腾'
-                    : '专属双界干涉场 · 炼金合成封印阵'}
-                </div>
-                <div className="text-[9px] font-mono mt-0.5" style={{ color: dna.mutedTextColor }}>
-                  Ψ(x,y) = {dna.chladniA.toFixed(2)}·sin({dna.chladniN.toFixed(1)}πx)sin({dna.chladniM.toFixed(1)}πy) + {dna.chladniB.toFixed(2)}·cos({dna.chladniM.toFixed(1)}πx)cos({dna.chladniN.toFixed(1)}πy)
-                </div>
-              </div>
-            </div>
-
-            {/* ENGRAVED GENERATIVE SIGNATURE & DATA PLAQUE */}
-            <div className="relative z-10 space-y-2">
-              {/* Mathematical Pattern DNA Bar */}
-              <div
-                className="px-3 py-2 rounded-xl flex items-center justify-between text-[10px] font-mono"
-                style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span style={{ color: dna.mutedTextColor }}>头像色权(30%):</span>
-                  <div className="flex items-center gap-1">
-                    {dna.avatarSwatches.slice(0, 4).map((hex, i) => (
-                      <span
-                        key={i}
-                        className="w-3 h-3 rounded-full border border-black/30"
-                        style={{ backgroundColor: hex }}
-                      />
-                    ))}
-                  </div>
-                </div>
-                <span style={{ color: dna.primaryColor }} className="font-bold">
-                  SYM-{dna.symmetryOrder} · LISSAJOUS {dna.lissajousKx}:{dna.lissajousKy}
-                </span>
-              </div>
-
-              {slot === 'outer' && features && (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div
-                    className="p-2 rounded-xl"
-                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                  >
-                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
-                      脉冲爆发度 (Fano)
-                    </div>
-                    <div className="text-sm font-bold font-mono">{features.burstinessFano}</div>
-                  </div>
-                  <div
-                    className="p-2 rounded-xl"
-                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                  >
-                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
-                      深夜活跃 (0-6点)
-                    </div>
-                    <div className="text-sm font-bold font-mono">{features.nightOwlIndex}%</div>
-                  </div>
-                  <div
-                    className="p-2 rounded-xl"
-                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                  >
-                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
-                      单篇平均字数
-                    </div>
-                    <div className="text-sm font-bold font-mono">{features.avgCharCount} 字</div>
-                  </div>
-                  <div
-                    className="p-2 rounded-xl"
-                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                  >
-                    <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
-                      原创 / 回复占比
-                    </div>
-                    <div className="text-sm font-bold font-mono">
-                      {features.originalRate}% / {features.replyRate}%
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {slot === 'inner' && (
-                <div className="space-y-1.5 text-xs">
-                  <div
-                    className="p-2.5 rounded-xl"
-                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                  >
-                    <div className="text-[10px] font-mono font-bold mb-0.5" style={{ color: dna.primaryColor }}>
-                      ✦ 灵魂核心渴望 (Core Desire)
-                    </div>
-                    <div className="text-[11px]">{innerArch.coreDesireZh}</div>
-                  </div>
-                  <div
-                    className="p-2.5 rounded-xl"
-                    style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                  >
-                    <div className="text-[10px] font-mono font-bold mb-0.5" style={{ color: dna.secondaryColor }}>
-                      🌑 潜意识暗影 (Shadow Side)
-                    </div>
-                    <div className="text-[11px]">{innerArch.shadowZh}</div>
-                  </div>
-                </div>
-              )}
-
-              {slot === 'fusion' && fusionPersona && (
-                <div
-                  className="p-3 rounded-2xl space-y-1 text-xs"
-                  style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
-                >
-                  <div className="flex items-center justify-between font-mono text-[11px] font-bold">
-                    <span style={{ color: dna.primaryColor }}>
-                      ⚗️ [{persona.code}] ⊗ [{innerType}]
-                    </span>
-                    <span style={{ color: dna.secondaryColor }}>
-                      同步率 {fusionPersona.consistencyIndex}%
-                    </span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed">{fusionPersona.loreZh}</p>
-                </div>
-              )}
-            </div>
-
-            {/* BACK FOOTER */}
-            <div
-              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono"
-              style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
-            >
-              <span>1-OF-1 PROCEDURAL BACKPRINT</span>
-              <span>@{profile.screenName}</span>
-            </div>
           </div>
         </div>
       </div>
@@ -1184,13 +939,8 @@ export const PersonaCard: React.FC = () => {
         </div>
 
         {/* Sub-bar */}
-        <div className="flex items-center justify-between mt-2 px-2 text-[11px] text-slate-400">
-          <div className="flex items-center gap-1.5 font-mono">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>克拉尼驻波(Chladni) + 旋轮线(Hypotrochoid) 实时参数化生成</span>
-          </div>
-
-          {hasInnerCard && (
+        {hasInnerCard && (
+          <div className="flex items-center justify-end mt-2 px-1">
             <button
               onClick={() => setShowTrinityGallery(!showTrinityGallery)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-medium cursor-pointer transition-colors"
@@ -1207,8 +957,8 @@ export const PersonaCard: React.FC = () => {
                 </>
               )}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ==================== FUSION RITUAL OVERLAY ==================== */}
