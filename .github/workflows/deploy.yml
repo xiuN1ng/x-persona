@@ -26,22 +26,21 @@ jobs:
         with:
           node-version: 22
           cache: "npm"
-          cache-dependency-path: x-persona/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: |
-          cd x-persona
-          npm ci
+        run: npm ci
+
+      - name: Run Tests
+        run: npm test -- --run
 
       - name: Build
-        run: |
-          cd x-persona
-          npm run build
+        run: npm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: x-persona/dist
+          path: dist
 
   deploy:
     environment:

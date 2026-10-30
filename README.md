@@ -2,8 +2,8 @@
 
 > 输入你的 X 用户名，10 秒内生成你的赛博人格卡；再做一套 32 题自评问卷，看看“别人眼里的你（推文）”和“你眼里的你（问卷）”差多远。
 
-[![License: PolyForm Noncommercial](https://img.shields.io/badge/Code_License-PolyForm_NC_1.0-blue.svg)](LICENSE)
-[![Content License: CC BY-NC-SA 4.0](https://img.shields.io/badge/Content-CC_BY--NC--SA_4.0-lightgrey.svg)](LICENSE-CONTENT)
+[![License: MIT](https://img.shields.io/badge/Code_License-MIT-emerald.svg)](LICENSE)
+[![Content License: CC BY-NC-SA 4.0](https://img.shields.io/badge/Questionnaire-CC_BY--NC--SA_4.0-lightgrey.svg)](LICENSE-CONTENT)
 [![Built with React 19](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev/)
 [![Tailwind CSS v4](https://img.shields.io/badge/Tailwind-v4-38bdf8.svg)](https://tailwindcss.com/)
 [![Tests](https://img.shields.io/badge/Vitest-Passing-brightgreen.svg)]()
@@ -61,8 +61,8 @@ npm run build
 
 ## 📜 许可协议与合规声明
 
-- **代码许可**：[PolyForm Noncommercial 1.0.0](LICENSE)（允许非商业个人与教育用途使用与修改，禁止商业化）。
-- **内容许可**（题库翻译、提示词模板、原型文案）：[CC BY-NC-SA 4.0](LICENSE-CONTENT)。
+- **源码许可**：[MIT License](LICENSE)。
+- **量表题库许可**（OEJTS 1.2 题库翻译与计分权重）：[CC BY-NC-SA 4.0](LICENSE-CONTENT)。
 - **署名与来源**：
   - 16 型人格题目与计分算法源自 [Open Extended Jungian Type Scales 1.2 (OEJTS)](https://openpsychometrics.org/tests/OEJTS/) © OpenPsychometrics.org。
   - 公开网关接口基于 [FxTwitter / FixTweet](https://github.com/FixTweet/FxTwitter) (MIT)。
