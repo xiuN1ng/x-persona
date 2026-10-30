@@ -1,48 +1,52 @@
-/* 3D Free-Orbit Holographic Slab Rendering Engine (18px Physical Thickness) */
+/* 3D Free-Orbit Holographic Slab Rendering Engine (20px True Physical Thickness) */
 
 .card-perspective-container {
   perspective: 1300px;
-  transform-style: preserve-3d;
   touch-action: none;
 }
 
+/* CRITICAL FOR CHROMIUM/BLINK 3D:
+   No overflow:hidden, no filter, no backdrop-filter, no mix-blend-mode, no box-shadow on .card-3d-root */
 .card-3d-root {
   transform-style: preserve-3d;
-  will-change: transform;
+  -webkit-transform-style: preserve-3d;
 }
 
+/* Front and Back faces sit at +10px and -10px (total 20px slab thickness) */
 .card-face-front,
 .card-face-back {
+  transform-style: flat;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  transform-style: preserve-3d;
+  box-shadow: 0 28px 60px -15px rgba(0, 0, 0, 0.78);
 }
 
-/* Front sits at +9px, Back sits at -9px -> 18px total physical slab thickness */
 .card-face-front {
-  transform: rotateY(0deg) translateZ(9px);
+  transform: rotateY(0deg) translateZ(10px);
 }
 
 .card-face-back {
-  transform: rotateY(180deg) translateZ(9px);
+  transform: rotateY(180deg) translateZ(10px);
 }
 
-/* 3D Extruded Slab Layer Slice */
+/* Hollow 3D Extruded Rim Ring Slice:
+   Creates solid 20px thickness around the 30px rounded corners & edges while leaving center 100% open */
 .card-slab-slice {
   position: absolute;
   inset: 0;
   border-radius: 30px;
+  background: transparent;
   pointer-events: none;
-  transform-style: preserve-3d;
+  backface-visibility: visible;
 }
 
-/* Perpendicular Spine Walls for 90-degree edge-on solidity & laser engraving */
+/* Perpendicular 20px Solid Metallic Spine Walls (visible dead-on at 90° and 270°) */
 .card-spine-right {
   position: absolute;
-  top: 28px;
-  bottom: 28px;
-  right: -9px;
-  width: 18px;
+  top: 22px;
+  bottom: 22px;
+  right: -10px;
+  width: 20px;
   transform: rotateY(90deg);
   transform-origin: center center;
   pointer-events: none;
@@ -51,10 +55,10 @@
 
 .card-spine-left {
   position: absolute;
-  top: 28px;
-  bottom: 28px;
-  left: -9px;
-  width: 18px;
+  top: 22px;
+  bottom: 22px;
+  left: -10px;
+  width: 20px;
   transform: rotateY(-90deg);
   transform-origin: center center;
   pointer-events: none;
@@ -63,10 +67,10 @@
 
 .card-spine-top {
   position: absolute;
-  left: 28px;
-  right: 28px;
-  top: -9px;
-  height: 18px;
+  left: 22px;
+  right: 22px;
+  top: -10px;
+  height: 20px;
   transform: rotateX(90deg);
   transform-origin: center center;
   pointer-events: none;
@@ -75,53 +79,88 @@
 
 .card-spine-bottom {
   position: absolute;
-  left: 28px;
-  right: 28px;
-  bottom: -9px;
-  height: 18px;
+  left: 22px;
+  right: 22px;
+  bottom: -10px;
+  height: 20px;
   transform: rotateX(-90deg);
   transform-origin: center center;
   pointer-events: none;
   backface-visibility: visible;
 }
 
-/* Holographic Iridescent Shimmer */
+/* 4 Rounded Corner Bevel Bridge Plates so 90°/270° view has full 20px thickness at the rounded tips too */
+.card-corner-tr {
+  position: absolute;
+  top: 2px;
+  right: -5px;
+  width: 20px;
+  height: 24px;
+  transform: translateX(-4px) rotateY(90deg) rotateX(32deg);
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.card-corner-br {
+  position: absolute;
+  bottom: 2px;
+  right: -5px;
+  width: 20px;
+  height: 24px;
+  transform: translateX(-4px) rotateY(90deg) rotateX(-32deg);
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.card-corner-tl {
+  position: absolute;
+  top: 2px;
+  left: -5px;
+  width: 20px;
+  height: 24px;
+  transform: translateX(4px) rotateY(-90deg) rotateX(32deg);
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+.card-corner-bl {
+  position: absolute;
+  bottom: 2px;
+  left: -5px;
+  width: 20px;
+  height: 24px;
+  transform: translateX(4px) rotateY(-90deg) rotateX(-32deg);
+  transform-origin: center center;
+  pointer-events: none;
+}
+
+/* Holographic Iridescent Shimmer (pure alpha gradient, NO mix-blend-mode so 3D tree never flattens!) */
 .holo-shimmer-aurora {
   background: linear-gradient(
     var(--ha, 115deg),
     transparent 0%,
-    rgba(255, 119, 119, 0.16) 15%,
-    rgba(255, 237, 95, 0.22) 30%,
-    rgba(168, 255, 95, 0.16) 45%,
-    rgba(131, 255, 247, 0.26) 60%,
-    rgba(120, 148, 255, 0.22) 75%,
-    rgba(216, 112, 255, 0.22) 90%,
+    rgba(255, 119, 119, 0.12) 18%,
+    rgba(255, 237, 95, 0.16) 34%,
+    rgba(168, 255, 95, 0.12) 48%,
+    rgba(131, 255, 247, 0.18) 64%,
+    rgba(120, 148, 255, 0.14) 78%,
+    rgba(216, 112, 255, 0.14) 90%,
     transparent 100%
   );
-  background-size: 200% 200%;
-  mix-blend-mode: color-dodge;
   opacity: var(--op, 0);
   transition: opacity 0.25s ease;
   pointer-events: none;
 }
 
-/* Dynamic Glare Spot */
+/* Dynamic Specular Glare Spot (pure alpha gradient, NO mix-blend-mode) */
 .card-glare {
   background: radial-gradient(
     circle at var(--gx, 50%) var(--gy, 50%),
-    rgba(255, 255, 255, 0.44) 0%,
-    rgba(255, 255, 255, 0.12) 28%,
-    transparent 62%
+    rgba(255, 255, 255, 0.28) 0%,
+    rgba(255, 255, 255, 0.08) 28%,
+    transparent 60%
   );
-  mix-blend-mode: overlay;
   opacity: var(--op, 0);
   transition: opacity 0.25s ease;
   pointer-events: none;
-}
-
-/* Card Bevel & Deep 3D Slab Shadow */
-.card-metallic-bevel {
-  box-shadow: 
-    0 34px 70px -14px rgba(0, 0, 0, 0.82),
-    0 0 42px -6px var(--card-glow, rgba(168, 85, 247, 0.28));
 }

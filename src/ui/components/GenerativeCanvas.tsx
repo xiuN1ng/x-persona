@@ -69,6 +69,8 @@ export interface GenerativeDNA {
   hypotrochoidR: number;
   hypotrochoidr: number;
   hypotrochoidd: number;
+  lissajousKx: number;
+  lissajousKy: number;
   symmetryOrder: number;
   turbulence: number;
   frameStyle: 'celestial' | 'cyber-hud' | 'tarot-arch' | 'alchemical-seal';
@@ -95,12 +97,12 @@ const COLOR_WORLDS: ColorWorld[] = [
     isLight: true,
     bgBase: '#faf6f0',
     bgSecondary: '#ede4d3',
-    primary: '#c27803',
+    primary: '#b45309',
     secondary: '#9a3412',
     tertiary: '#d97706',
     text: '#1c1917',
     muted: '#57534e',
-    border: 'rgba(194, 120, 3, 0.48)',
+    border: 'rgba(180, 83, 9, 0.55)',
   },
   // 1: 苍翠青瓷 (Jade Celadon - Fresh Light Mint & Emerald)
   {
@@ -110,10 +112,10 @@ const COLOR_WORLDS: ColorWorld[] = [
     bgSecondary: '#d8ece3',
     primary: '#047857',
     secondary: '#0f766e',
-    tertiary: '#10b981',
+    tertiary: '#059669',
     text: '#064e3b',
     muted: '#3f6259',
-    border: 'rgba(4, 120, 87, 0.45)',
+    border: 'rgba(4, 120, 87, 0.52)',
   },
   // 2: 幻彩珍珠 (Iridescent Pearl - Fresh Pastel Lavender & Sky)
   {
@@ -126,7 +128,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#0284c7',
     text: '#1e1b4b',
     muted: '#4c1d95',
-    border: 'rgba(109, 40, 217, 0.42)',
+    border: 'rgba(109, 40, 217, 0.5)',
   },
   // 3: 落日流霞 (Sunset Coral - Warm Light Cream & Rose)
   {
@@ -139,7 +141,7 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#9333ea',
     text: '#3b0712',
     muted: '#7f1d1d',
-    border: 'rgba(225, 29, 72, 0.42)',
+    border: 'rgba(225, 29, 72, 0.5)',
   },
   // 4: 冰川银钛 (Glacier Titanium - Crisp Ice Blue & Slate)
   {
@@ -152,72 +154,72 @@ const COLOR_WORLDS: ColorWorld[] = [
     tertiary: '#0891b2',
     text: '#0c2747',
     muted: '#334e68',
-    border: 'rgba(3, 105, 161, 0.42)',
+    border: 'rgba(3, 105, 161, 0.5)',
   },
   // 5: 朱砂玄墨 (Cinnabar Ink - Wuxia Crimson & Deep Ink)
   {
     name: '朱砂玄墨 · Cinnabar Ink',
     isLight: false,
-    bgBase: '#11090c',
-    bgSecondary: '#230d15',
-    primary: '#f43f5e',
+    bgBase: '#11080c',
+    bgSecondary: '#260d17',
+    primary: '#fb7185',
     secondary: '#fb923c',
     tertiary: '#fde047',
     text: '#fff1f2',
     muted: '#fda4af',
-    border: 'rgba(244, 63, 94, 0.55)',
+    border: 'rgba(251, 113, 133, 0.65)',
   },
   // 6: 紫微星渊 (Astral Amethyst - Deep Cosmic Violet & Gold)
   {
     name: '紫微星渊 · Astral Amethyst',
     isLight: false,
-    bgBase: '#0d071c',
+    bgBase: '#0b061a',
     bgSecondary: '#1c0f38',
     primary: '#c084fc',
     secondary: '#f472b6',
     tertiary: '#fbbf24',
     text: '#faf5ff',
     muted: '#d8b4fe',
-    border: 'rgba(192, 132, 252, 0.55)',
+    border: 'rgba(192, 132, 252, 0.65)',
   },
   // 7: 赛博霓虹 (Cyber Neon - Matrix Cyan & Electric Magenta)
   {
     name: '赛博霓虹 · Cyber Neon',
     isLight: false,
-    bgBase: '#050d1a',
-    bgSecondary: '#0a1e36',
+    bgBase: '#040b17',
+    bgSecondary: '#0a1e38',
     primary: '#22d3ee',
     secondary: '#e879f9',
     tertiary: '#38bdf8',
     text: '#ecfeff',
     muted: '#67e8f9',
-    border: 'rgba(34, 211, 238, 0.55)',
+    border: 'rgba(34, 211, 238, 0.65)',
   },
   // 8: 黑曜熔金 (Obsidian Gold - Royal Black & Liquid Gold)
   {
     name: '黑曜熔金 · Obsidian Gold',
     isLight: false,
-    bgBase: '#0c0a06',
-    bgSecondary: '#1e180d',
+    bgBase: '#0a0805',
+    bgSecondary: '#1f180c',
     primary: '#fbbf24',
     secondary: '#f59e0b',
     tertiary: '#fef08a',
     text: '#fefce8',
     muted: '#fde68a',
-    border: 'rgba(251, 191, 36, 0.6)',
+    border: 'rgba(251, 191, 36, 0.68)',
   },
   // 9: 深海幽萤 (Bioluminescent Abyss - Emerald & Teal Glow)
   {
     name: '深海幽萤 · Abyssal Emerald',
     isLight: false,
-    bgBase: '#041311',
-    bgSecondary: '#072924',
+    bgBase: '#03110f',
+    bgSecondary: '#072b26',
     primary: '#34d399',
     secondary: '#2dd4bf',
     tertiary: '#a7f3d0',
     text: '#ecfdf5',
     muted: '#6ee7b7',
-    border: 'rgba(52, 211, 153, 0.55)',
+    border: 'rgba(52, 211, 153, 0.65)',
   },
 ]
 
@@ -244,7 +246,6 @@ export function computeGenerativeDNA(
   const extra: ExtraGenerativeMetrics = Array.isArray(extraMetrics) ? {} : extraMetrics || {}
   const avatar = extra.avatarFeatures
 
-  // Avatar Style Weight = 30% (0.30), Persona Weight = 70% (0.70)
   const AVATAR_WEIGHT = 0.30
   const PERSONA_WEIGHT = 0.70
 
@@ -275,9 +276,9 @@ export function computeGenerativeDNA(
   let worldIndex = 0
   if (variant === 'fusion') {
     const c = extra.consistency ?? 75
-    if (c >= 78) worldIndex = avatarLum > 72 ? 0 : 8 // Solar Alabaster or Obsidian Gold
-    else if (c >= 58) worldIndex = avatarLum > 55 ? 2 : 6 // Iridescent Pearl or Astral Amethyst
-    else worldIndex = weightedWarmth >= 52 ? 5 : 7 // Cinnabar Ink or Cyber Neon
+    if (c >= 78) worldIndex = avatarLum > 72 ? 0 : 8
+    else if (c >= 58) worldIndex = avatarLum > 55 ? 2 : 6
+    else worldIndex = weightedWarmth >= 52 ? 5 : 7
   } else if (variant === 'inner') {
     const preferLight = avatarLum >= 46
     if (code.includes('NF')) worldIndex = preferLight ? 2 : 6
@@ -286,7 +287,6 @@ export function computeGenerativeDNA(
     else worldIndex = preferLight ? 3 : 9
   } else {
     const nightOwl = extra.nightOwl ?? 15
-    // Combine nocturnal posting behavior (70%) with dark avatar luminance (30%)
     const nocturnalScore = nightOwl * 2.2 * PERSONA_WEIGHT + (100 - avatarLum) * AVATAR_WEIGHT
     if (nocturnalScore >= 52) {
       const darkWorlds = [5, 6, 7, 8, 9]
@@ -305,7 +305,7 @@ export function computeGenerativeDNA(
 
   const world = COLOR_WORLDS[worldIndex] || COLOR_WORLDS[0]
 
-  // Blend the world's base palette with the user's extracted Avatar colors (30%-35% chromatic infusion)
+  // Blend the world's base palette with the user's extracted Avatar colors (34%-42% chromatic infusion)
   const primaryColor = avatar
     ? blendHexColors(world.primary, avatar.dominantColorHex, 0.34)
     : world.primary
@@ -317,21 +317,24 @@ export function computeGenerativeDNA(
     : world.tertiary
 
   const [pr, pg, pb] = parseHexToRgb(primaryColor)
-  const borderColor = `rgba(${pr}, ${pg}, ${pb}, ${world.isLight ? 0.48 : 0.58})`
+  const borderColor = `rgba(${pr}, ${pg}, ${pb}, ${world.isLight ? 0.55 : 0.68})`
 
   // Chladni plate wave numbers (n, m) derived from 70% Persona + 30% Avatar detail/contrast
-  const chladniN = 1 + (Math.round(weightedField / 13) % 7) + rng() * 0.45
-  const chladniM = 2 + (Math.round(weightedDetail / 11) % 8) + rng() * 0.45
-  const chladniA = ((weightedWarmth - 50) / 50) * 1.8 + (rng() - 0.5) * 0.5
-  const chladniB = ((weightedEnergy - 50) / 50) * 1.8 + (rng() - 0.5) * 0.5
+  const chladniN = 1.5 + (Math.round(weightedField / 12) % 6) + rng() * 0.65
+  const chladniM = 2.2 + (Math.round(weightedDetail / 10) % 7) + rng() * 0.65
+  const chladniA = ((weightedWarmth - 50) / 45) * 1.9 + (rng() - 0.5) * 0.6
+  const chladniB = ((weightedEnergy - 50) / 45) * 1.9 + (rng() - 0.5) * 0.6
 
-  // Spirograph / Hypotrochoid parameters for centerpiece sacred geometry
+  // Spirograph / Hypotrochoid & Lissajous parameters
   const hueStep = avatar ? Math.floor(avatar.dominantHue / 45) : 0
   const symmetryOrder =
-    3 + ((Math.round(weightedField / 10) + Math.round(weightedEnergy / 15) + hueStep + (seed % 5)) % 10)
-  const hypotrochoidR = 58
+    4 + ((Math.round(weightedField / 9) + Math.round(weightedEnergy / 13) + hueStep + (seed % 7)) % 11) // 4 to 14
+  const hypotrochoidR = 60
   const hypotrochoidr = (hypotrochoidR / symmetryOrder) * (1 + (seed % 3))
-  const hypotrochoidd = 18 + (weightedWarmth / 100) * 32
+  const hypotrochoidd = 20 + (weightedWarmth / 100) * 34
+
+  const lissajousKx = 2 + ((Math.round(weightedField / 15) + (seed % 5)) % 7)
+  const lissajousKy = 3 + ((Math.round(weightedDetail / 14) + ((seed >>> 4) % 5)) % 8)
 
   const frameStyles: GenerativeDNA['frameStyle'][] = [
     'celestial',
@@ -385,22 +388,28 @@ export function computeGenerativeDNA(
     hypotrochoidR,
     hypotrochoidr,
     hypotrochoidd,
+    lissajousKx,
+    lissajousKy,
     symmetryOrder,
-    turbulence: 0.4 + (weightedEnergy / 100) * 1.6,
+    turbulence: 0.5 + (weightedEnergy / 100) * 1.8,
     frameStyle,
     topologyMode,
   }
 }
 
 /**
- * Full-bleed HTML5 Canvas Generative Shader
- * Renders Chladni acoustic standing waves, flow fields, and constellation interference patterns
+ * Full-bleed HTML5 Canvas Generative Artwork Shader
+ * Renders high-contrast, unmistakable 1-of-1 procedural patterns:
+ * - Multi-band Chladni standing-wave Damascus contours
+ * - Guilloché epitrochoid / hypotrochoid currency-grade rosettes
+ * - Lissajous harmonic webs & radial circadian starbursts (especially prominent on the Card Back)
  */
 export const ProceduralPatternCanvas: React.FC<{
   dna: GenerativeDNA;
   axes: AxisScores;
   isBack?: boolean;
-}> = ({ dna, axes, isBack = false }) => {
+  hourlyDistribution?: number[];
+}> = ({ dna, axes, isBack = false, hourlyDistribution }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {
@@ -413,145 +422,224 @@ export const ProceduralPatternCanvas: React.FC<{
     const h = canvas.height
     ctx.clearRect(0, 0, w, h)
 
-    // 1. Base Gradient Fill
+    // 1. Deep Base Gradient Fill
     const bgGrad = ctx.createLinearGradient(0, 0, w, h)
     bgGrad.addColorStop(0, dna.bgBase)
-    bgGrad.addColorStop(0.55, dna.bgSecondary)
+    bgGrad.addColorStop(0.5, dna.bgSecondary)
     bgGrad.addColorStop(1, dna.bgBase)
     ctx.fillStyle = bgGrad
     ctx.fillRect(0, 0, w, h)
 
-    // 2. Soft Ambient Radial Aura (infused with Avatar + Persona blended colors)
-    const aura = ctx.createRadialGradient(
-      w * 0.5,
-      isBack ? h * 0.42 : h * 0.36,
-      10,
-      w * 0.5,
-      h * 0.45,
-      w * 0.78
-    )
-    aura.addColorStop(0, `${dna.primaryColor}${dna.isLightTheme ? '26' : '38'}`)
-    aura.addColorStop(0.55, `${dna.secondaryColor}${dna.isLightTheme ? '16' : '22'}`)
+    // 2. Ambient Radial Aura (stronger on Card Back for Tarot/Mandala focal glow)
+    const focalY = isBack ? h * 0.43 : h * 0.35
+    const aura = ctx.createRadialGradient(w * 0.5, focalY, 8, w * 0.5, focalY, w * 0.72)
+    aura.addColorStop(0, `${dna.primaryColor}${dna.isLightTheme ? '38' : '55'}`)
+    aura.addColorStop(0.5, `${dna.secondaryColor}${dna.isLightTheme ? '22' : '32'}`)
     aura.addColorStop(1, 'transparent')
     ctx.fillStyle = aura
     ctx.fillRect(0, 0, w, h)
 
-    // 3. Chladni Standing Wave Resonance Field:
-    // Equation: a * sin(pi * n * x) * sin(pi * m * y) + b * cos(pi * m * x) * cos(pi * n * y) = 0
-    const n = isBack ? dna.chladniM : dna.chladniN
-    const m = isBack ? dna.chladniN : dna.chladniM
+    // 3. Multi-Band Chladni Standing-Wave Damascus Iso-Contours
+    // Equation: a * sin(pi * n * x) * sin(pi * m * y) + b * cos(pi * m * x) * cos(pi * n * y) = c
+    const n = isBack ? dna.chladniM * 1.15 : dna.chladniN
+    const m = isBack ? dna.chladniN * 1.15 : dna.chladniM
     const a = dna.chladniA
     const b = dna.chladniB
+    const phase = (dna.seed % 100) * 0.03
 
     ctx.save()
-    const step = 6
-    for (let py = 18; py < h - 18; py += step) {
-      for (let px = 18; px < w - 18; px += step) {
+    const step = 4
+    for (let py = 14; py < h - 14; py += step) {
+      for (let px = 14; px < w - 14; px += step) {
         const nx = (px / w) * 2 - 1
         const ny = (py / h) * 2 - 1
+        const rDist = Math.hypot(nx, ny * 1.2)
+
         const val =
-          a * Math.sin(Math.PI * n * nx) * Math.sin(Math.PI * m * ny) +
-          b * Math.cos(Math.PI * m * nx) * Math.cos(Math.PI * n * ny)
+          a * Math.sin(Math.PI * n * nx + phase) * Math.sin(Math.PI * m * ny) +
+          b * Math.cos(Math.PI * m * nx) * Math.cos(Math.PI * n * ny - phase) +
+          0.25 * Math.sin(rDist * Math.PI * (dna.symmetryOrder * 0.5))
 
         const absVal = Math.abs(val)
-        if (absVal < 0.16) {
-          const alpha = (1 - absVal / 0.16) * (dna.isLightTheme ? 0.24 : 0.3)
-          ctx.fillStyle = absVal < 0.06 ? dna.primaryColor : dna.secondaryColor
-          ctx.globalAlpha = alpha
-          ctx.beginPath()
-          ctx.arc(px, py, absVal < 0.05 ? 1.5 : 0.9, 0, Math.PI * 2)
-          ctx.fill()
+
+        // Band 1: Primary nodal zero-crossing ridge (bold & crisp)
+        if (absVal < 0.085) {
+          const intensity = 1 - absVal / 0.085
+          ctx.fillStyle = dna.primaryColor
+          ctx.globalAlpha = intensity * (isBack ? (dna.isLightTheme ? 0.48 : 0.62) : (dna.isLightTheme ? 0.34 : 0.44))
+          ctx.fillRect(px - 1, py - 1, 2.4, 2.4)
+        }
+        // Band 2: Secondary harmonic contour ring
+        else if (absVal > 0.36 && absVal < 0.42) {
+          ctx.fillStyle = dna.secondaryColor
+          ctx.globalAlpha = isBack ? (dna.isLightTheme ? 0.32 : 0.42) : (dna.isLightTheme ? 0.2 : 0.28)
+          ctx.fillRect(px, py, 1.8, 1.8)
+        }
+        // Band 3: Tertiary outer resonance contour
+        else if (absVal > 0.72 && absVal < 0.77) {
+          ctx.fillStyle = dna.tertiaryColor
+          ctx.globalAlpha = isBack ? 0.3 : 0.18
+          ctx.fillRect(px, py, 1.5, 1.5)
         }
       }
     }
     ctx.restore()
 
-    // 4. Secondary Topology Layer (Flowfield / Constellation / Vortex)
-    const rng = createRng(dna.seed + (isBack ? 777 : 0))
+    // 4. Full-Card Parametric Guilloché Spirograph Rosette (uniquely shaped for every user)
     ctx.save()
+    const cx = w / 2
+    const cy = focalY
+    const guillocheRings = isBack ? 3 : 2
 
-    if (dna.topologyMode === 'flowfield' || dna.topologyMode === 'chladni') {
-      const curveCount = 26 + Math.round(axes.rhythm / 4)
-      ctx.lineWidth = 1
-      for (let i = 0; i < curveCount; i++) {
-        let cx = rng() * w
-        let cy = rng() * h
-        ctx.strokeStyle = i % 3 === 0 ? dna.tertiaryColor : i % 2 === 0 ? dna.primaryColor : dna.secondaryColor
-        ctx.globalAlpha = dna.isLightTheme ? 0.15 : 0.2
+    for (let ring = 0; ring < guillocheRings; ring++) {
+      const baseR = (isBack ? 148 : 132) - ring * 34
+      const order = dna.symmetryOrder + ring * 2
+      const rMod = baseR / order
+      const dMod = dna.hypotrochoidd * (0.85 + ring * 0.25)
+
+      ctx.beginPath()
+      const totalSteps = 540
+      for (let i = 0; i <= totalSteps; i++) {
+        const t = (i / totalSteps) * Math.PI * 2 * (order % 2 === 0 ? 3 : 4)
+        const gx =
+          cx +
+          (baseR - rMod) * Math.cos(t) +
+          dMod * Math.cos(((baseR - rMod) / rMod) * t + ring * 0.8)
+        const gy =
+          cy +
+          (baseR - rMod) * Math.sin(t) -
+          dMod * Math.sin(((baseR - rMod) / rMod) * t + ring * 0.8)
+        if (i === 0) ctx.moveTo(gx, gy)
+        else ctx.lineTo(gx, gy)
+      }
+      ctx.strokeStyle =
+        ring === 0 ? dna.primaryColor : ring === 1 ? dna.secondaryColor : dna.tertiaryColor
+      ctx.lineWidth = isBack ? 1.35 : 0.95
+      ctx.globalAlpha = isBack
+        ? dna.isLightTheme
+          ? 0.52
+          : 0.68
+        : dna.isLightTheme
+        ? 0.24
+        : 0.32
+      ctx.stroke()
+    }
+    ctx.restore()
+
+    // 5. Card Back Exclusive: 1-of-1 Sacred Astrolabe, Lissajous Web & 4-Corner Rosettes
+    if (isBack) {
+      ctx.save()
+      // 5a. 4 Corner Guilloché Knots
+      const corners = [
+        [46, 52],
+        [w - 46, 52],
+        [46, h - 52],
+        [w - 46, h - 52],
+      ]
+      for (const [kx, ky] of corners) {
         ctx.beginPath()
-        ctx.moveTo(cx, cy)
-        for (let s = 0; s < 28; s++) {
-          const angle =
-            Math.sin((cx / w) * Math.PI * dna.chladniN) *
-              Math.cos((cy / h) * Math.PI * dna.chladniM) *
-              Math.PI *
-              dna.turbulence
-          cx += Math.cos(angle) * 7
-          cy += Math.sin(angle) * 7
-          ctx.lineTo(cx, cy)
-        }
-        ctx.stroke()
-      }
-    } else if (dna.topologyMode === 'constellation') {
-      const nodes: Array<{ x: number; y: number; r: number }> = []
-      const count = 28 + Math.round(axes.field / 4)
-      for (let i = 0; i < count; i++) {
-        nodes.push({
-          x: 24 + rng() * (w - 48),
-          y: 24 + rng() * (h - 48),
-          r: 1.2 + rng() * 2.2,
-        })
-      }
-      ctx.strokeStyle = dna.primaryColor
-      ctx.lineWidth = 0.8
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dist = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y)
-          if (dist < 85) {
-            ctx.globalAlpha = (1 - dist / 85) * (dna.isLightTheme ? 0.22 : 0.28)
-            ctx.beginPath()
-            ctx.moveTo(nodes[i].x, nodes[i].y)
-            ctx.lineTo(nodes[j].x, nodes[j].y)
-            ctx.stroke()
-          }
-        }
-      }
-      ctx.fillStyle = dna.secondaryColor
-      for (const node of nodes) {
-        ctx.globalAlpha = dna.isLightTheme ? 0.45 : 0.65
-        ctx.beginPath()
-        ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    } else {
-      ctx.strokeStyle = dna.primaryColor
-      const cx = w / 2
-      const cy = h * 0.42
-      for (let r = 24; r < w * 0.65; r += 14) {
-        ctx.globalAlpha = dna.isLightTheme ? 0.15 : 0.2
-        ctx.lineWidth = r % 28 === 0 ? 1.4 : 0.7
-        ctx.beginPath()
-        for (let aIdx = 0; aIdx <= 120; aIdx++) {
-          const theta = (aIdx / 120) * Math.PI * 2
-          const wave = Math.sin(theta * dna.symmetryOrder + r * 0.05) * (axes.temperature / 12)
-          const px = cx + Math.cos(theta) * (r + wave)
-          const py = cy + Math.sin(theta) * (r + wave)
-          if (aIdx === 0) ctx.moveTo(px, py)
+        for (let i = 0; i <= 120; i++) {
+          const t = (i / 120) * Math.PI * 2
+          const r = 18 + 8 * Math.cos(dna.symmetryOrder * t)
+          const px = kx + Math.cos(t) * r
+          const py = ky + Math.sin(t) * r
+          if (i === 0) ctx.moveTo(px, py)
           else ctx.lineTo(px, py)
         }
         ctx.closePath()
+        ctx.strokeStyle = dna.primaryColor
+        ctx.globalAlpha = 0.55
+        ctx.lineWidth = 1.1
         ctx.stroke()
       }
+
+      // 5b. Lissajous Harmonic Resonance Web across the center
+      ctx.beginPath()
+      for (let i = 0; i <= 420; i++) {
+        const t = (i / 420) * Math.PI * 2
+        const lx = cx + Math.sin(dna.lissajousKx * t + phase) * 135
+        const ly = cy + Math.sin(dna.lissajousKy * t) * 165
+        if (i === 0) ctx.moveTo(lx, ly)
+        else ctx.lineTo(lx, ly)
+      }
+      ctx.strokeStyle = dna.tertiaryColor
+      ctx.globalAlpha = dna.isLightTheme ? 0.32 : 0.42
+      ctx.lineWidth = 1
+      ctx.stroke()
+
+      // 5c. 24-Hour Circadian Sunburst Rays radiating from focal center
+      const dist = hourlyDistribution && hourlyDistribution.length === 24
+        ? hourlyDistribution
+        : Array.from({ length: 24 }, (_, i) => ((i * dna.seed) % 10) + 2)
+      const maxH = Math.max(...dist, 0.01)
+
+      for (let hr = 0; hr < 24; hr++) {
+        const angle = (hr / 24) * Math.PI * 2 - Math.PI / 2
+        const norm = dist[hr] / maxH
+        const innerR = 72
+        const outerR = 96 + norm * 78
+
+        ctx.beginPath()
+        ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR)
+        ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR)
+        ctx.strokeStyle = hr % 2 === 0 ? dna.primaryColor : dna.secondaryColor
+        ctx.globalAlpha = 0.35 + norm * 0.55
+        ctx.lineWidth = 1.2 + norm * 2
+        ctx.stroke()
+
+        // Star jewel at the tip of each circadian ray
+        ctx.beginPath()
+        ctx.arc(
+          cx + Math.cos(angle) * outerR,
+          cy + Math.sin(angle) * outerR,
+          1.8 + norm * 2.2,
+          0,
+          Math.PI * 2
+        )
+        ctx.fillStyle = dna.tertiaryColor
+        ctx.globalAlpha = 0.75
+        ctx.fill()
+      }
+      ctx.restore()
+    } else {
+      // 6. Front Secondary Topology Layer (Flowfield / Constellation / Vortex)
+      const rng = createRng(dna.seed)
+      ctx.save()
+      if (dna.topologyMode === 'constellation') {
+        const nodes: Array<{ x: number; y: number; r: number }> = []
+        const count = 26 + Math.round(axes.field / 4)
+        for (let i = 0; i < count; i++) {
+          nodes.push({
+            x: 24 + rng() * (w - 48),
+            y: 24 + rng() * (h - 48),
+            r: 1.5 + rng() * 2.2,
+          })
+        }
+        ctx.strokeStyle = dna.primaryColor
+        ctx.lineWidth = 0.9
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const d = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y)
+            if (d < 90) {
+              ctx.globalAlpha = (1 - d / 90) * (dna.isLightTheme ? 0.25 : 0.34)
+              ctx.beginPath()
+              ctx.moveTo(nodes[i].x, nodes[i].y)
+              ctx.lineTo(nodes[j].x, nodes[j].y)
+              ctx.stroke()
+            }
+          }
+        }
+      }
+      ctx.restore()
     }
-    ctx.restore()
-  }, [dna, axes, isBack])
+  }, [dna, axes, isBack, hourlyDistribution])
 
   return (
     <canvas
       ref={canvasRef}
       width={380}
       height={575}
-      className="absolute inset-0 w-full h-full pointer-events-none rounded-[30px]"
+      className="absolute inset-0 w-full h-full pointer-events-none rounded-[28px]"
     />
   )
 }
@@ -567,7 +655,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
   secondaryIcon?: string;
   avatarUrl?: string;
 }> = ({ dna, axes, secondaryAxes, badgeIcon, secondaryIcon, avatarUrl }) => {
-  const size = 152
+  const size = 154
   const cx = size / 2
   const cy = size / 2
 
@@ -576,7 +664,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
   const r = dna.hypotrochoidr
   const d = dna.hypotrochoidd
   const spiroPoints: string[] = []
-  const steps = 240
+  const steps = 260
   for (let i = 0; i <= steps; i++) {
     const t = (i / steps) * Math.PI * 2 * (dna.symmetryOrder % 2 === 0 ? 2 : 3)
     const x = cx + (R - r) * Math.cos(t) + d * Math.cos(((R - r) / r) * t)
@@ -590,7 +678,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
   const polyPoints: string[] = []
   const order = dna.symmetryOrder
   for (let i = 0; i < order * 2; i++) {
-    const rad = i % 2 === 0 ? 66 : 30 + (axes.density / 100) * 18
+    const rad = i % 2 === 0 ? 67 : 30 + (axes.density / 100) * 18
     const angle = (i * Math.PI) / order - Math.PI / 2
     polyPoints.push(
       `${(cx + Math.cos(angle) * rad).toFixed(1)},${(cy + Math.sin(angle) * rad).toFixed(1)}`
@@ -614,20 +702,20 @@ export const ProceduralSigilCenterpiece: React.FC<{
       <svg width={size} height={size} className="overflow-visible">
         <defs>
           <radialGradient id={`sigilGlow-${dna.seed}`} cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={dna.primaryColor} stopOpacity={dna.isLightTheme ? '0.32' : '0.48'} />
-            <stop offset="70%" stopColor={dna.secondaryColor} stopOpacity="0.1" />
+            <stop offset="0%" stopColor={dna.primaryColor} stopOpacity={dna.isLightTheme ? '0.35' : '0.52'} />
+            <stop offset="70%" stopColor={dna.secondaryColor} stopOpacity="0.12" />
             <stop offset="100%" stopColor={dna.secondaryColor} stopOpacity="0" />
           </radialGradient>
         </defs>
 
         {/* Core Halo */}
-        <circle cx={cx} cy={cy} r={72} fill={`url(#sigilGlow-${dna.seed})`} />
+        <circle cx={cx} cy={cy} r={73} fill={`url(#sigilGlow-${dna.seed})`} />
 
         {/* Outer Degree Ticks */}
         {Array.from({ length: 24 }).map((_, i) => {
           const angle = (i / 24) * Math.PI * 2
           const r1 = i % 3 === 0 ? 64 : 67
-          const r2 = 70
+          const r2 = 71
           return (
             <line
               key={i}
@@ -636,8 +724,8 @@ export const ProceduralSigilCenterpiece: React.FC<{
               x2={cx + Math.cos(angle) * r2}
               y2={cy + Math.sin(angle) * r2}
               stroke={dna.primaryColor}
-              strokeOpacity="0.55"
-              strokeWidth={i % 3 === 0 ? '1.5' : '0.8'}
+              strokeOpacity="0.65"
+              strokeWidth={i % 3 === 0 ? '1.6' : '0.9'}
             />
           )
         })}
@@ -646,10 +734,10 @@ export const ProceduralSigilCenterpiece: React.FC<{
         <polygon
           points={polyPoints.join(' ')}
           fill={dna.primaryColor}
-          fillOpacity={dna.isLightTheme ? '0.09' : '0.14'}
+          fillOpacity={dna.isLightTheme ? '0.11' : '0.16'}
           stroke={dna.primaryColor}
-          strokeOpacity="0.7"
-          strokeWidth="1.2"
+          strokeOpacity="0.78"
+          strokeWidth="1.3"
         />
 
         {/* Parametric Spirograph / Hypotrochoid Curve */}
@@ -657,17 +745,17 @@ export const ProceduralSigilCenterpiece: React.FC<{
           points={spiroPoints.join(' ')}
           fill="none"
           stroke={dna.secondaryColor}
-          strokeOpacity="0.75"
-          strokeWidth="1.15"
+          strokeOpacity="0.82"
+          strokeWidth="1.25"
         />
 
         {/* 4-Axis Vector Diamond */}
         <polygon
           points={diamondPoints}
           fill={dna.tertiaryColor}
-          fillOpacity="0.15"
+          fillOpacity="0.18"
           stroke={dna.primaryColor}
-          strokeWidth="1.6"
+          strokeWidth="1.7"
         />
 
         {/* Center Medallion Outer Ring */}
@@ -675,7 +763,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
           cx={cx}
           cy={cy}
           r={27}
-          fill={dna.isLightTheme ? 'rgba(255,255,255,0.92)' : 'rgba(10,12,22,0.88)'}
+          fill={dna.isLightTheme ? 'rgba(255,255,255,0.94)' : 'rgba(10,12,22,0.9)'}
           stroke={dna.primaryColor}
           strokeWidth="2"
         />
@@ -685,8 +773,8 @@ export const ProceduralSigilCenterpiece: React.FC<{
           r={24}
           fill="none"
           stroke={dna.tertiaryColor}
-          strokeOpacity="0.6"
-          strokeWidth="0.8"
+          strokeOpacity="0.65"
+          strokeWidth="0.9"
           strokeDasharray="3 2"
         />
       </svg>
@@ -701,7 +789,6 @@ export const ProceduralSigilCenterpiece: React.FC<{
               className="w-11 h-11 rounded-full object-cover shadow-inner"
               style={{ border: `1.5px solid ${dna.primaryColor}` }}
             />
-            {/* Floating Archetype Crest Badge on bottom-right of medallion */}
             <div
               className="absolute -bottom-1.5 -right-1.5 px-1.5 py-0.5 rounded-full text-xs flex items-center justify-center shadow-md"
               style={{
@@ -720,12 +807,12 @@ export const ProceduralSigilCenterpiece: React.FC<{
             </div>
           </div>
         ) : secondaryIcon ? (
-          <div className="flex items-center -space-x-1.5 filter drop-shadow-md">
+          <div className="flex items-center -space-x-1.5">
             <span className="text-2xl transform -rotate-12">{badgeIcon}</span>
             <span className="text-2xl transform rotate-12">{secondaryIcon}</span>
           </div>
         ) : (
-          <span className="text-2xl filter drop-shadow-md">{badgeIcon}</span>
+          <span className="text-2xl">{badgeIcon}</span>
         )}
       </div>
     </div>
@@ -742,7 +829,6 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
       className="absolute inset-0 w-full h-full pointer-events-none z-10"
       fill="none"
     >
-      {/* Outer Recessed Groove Bevel */}
       <rect
         x="8"
         y="8"
@@ -750,7 +836,7 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
         height="559"
         rx="24"
         stroke={dna.primaryColor}
-        strokeOpacity="0.28"
+        strokeOpacity="0.32"
         strokeWidth="1.5"
       />
       <rect
@@ -760,7 +846,7 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
         height="553"
         rx="21"
         stroke={dna.primaryColor}
-        strokeOpacity="0.45"
+        strokeOpacity="0.5"
         strokeWidth="1"
       />
 
@@ -769,11 +855,11 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
           <path
             d="M 22 90 A 168 150 0 0 1 358 90"
             stroke={dna.primaryColor}
-            strokeOpacity="0.45"
+            strokeOpacity="0.5"
             strokeWidth="1.2"
             strokeDasharray="3 3"
           />
-          <circle cx="190" cy="18" r="4" fill={dna.primaryColor} fillOpacity="0.7" />
+          <circle cx="190" cy="18" r="4" fill={dna.primaryColor} fillOpacity="0.75" />
         </>
       )}
 
@@ -795,7 +881,7 @@ export const ProceduralFrameOverlay: React.FC<{ dna: GenerativeDNA }> = ({ dna }
             height="545"
             rx="18"
             stroke={dna.secondaryColor}
-            strokeOpacity="0.35"
+            strokeOpacity="0.4"
             strokeWidth="1"
             strokeDasharray="6 3"
           />

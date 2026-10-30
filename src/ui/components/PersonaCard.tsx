@@ -33,120 +33,125 @@ import { XIcon } from './XIcon'
 import './HoloCard.css'
 
 /**
- * 18px Physical 3D Extruded Metallic Slab Core
- * Stacks 22 precision rounded Z-layers from -8.4px to +8.4px plus 4 laser-engraved perpendicular spines
- * so the card has realistic billet metal & obsidian slab thickness when rotated at any 3D angle.
+ * 20px Physical 3D Extruded Metallic Slab Core
+ * Uses hollow metallic border rings (background: transparent) + 4 solid 20px perpendicular spines + 4 corner bridges.
+ * Returned as a direct Fragment inside .card-3d-root so Chromium's preserve-3d compositor renders true 20px thickness at 90°/270° and never obscures the Front or Back faces.
  */
 const CardSlabThickness: React.FC<{
   dna: GenerativeDNA;
   rotY: number;
   activeCode: string;
 }> = ({ dna, rotY, activeCode }) => {
-  // 22 Z-slices spanning -8.4px to +8.4px (step 0.8px)
-  const sliceCount = 22
+  // 21 hollow rim Z-slices spanning -9.2px to +9.2px
+  const sliceCount = 21
   const slices = Array.from({ length: sliceCount }, (_, i) => {
-    const z = -8.4 + (i / (sliceCount - 1)) * 16.8
+    const z = -9.2 + (i / (sliceCount - 1)) * 18.4
     const absZ = Math.abs(z)
-    const isOuterRim = absZ >= 6.4
-    const isCenterGroove = absZ <= 1.8
+    const isOuterRim = absZ >= 6.8
+    const isCenterGroove = absZ <= 2.0
     return { z, isOuterRim, isCenterGroove }
   })
 
-  // Dynamic specular highlight position along the slab edge based on Y rotation
   const specShift = Math.round(((Math.sin((rotY * Math.PI) / 180) + 1) / 2) * 100)
 
   const spineGradient = `linear-gradient(90deg, 
     ${dna.primaryColor} 0%, 
-    #f8fafc 14%, 
-    ${dna.secondaryColor} 28%, 
-    #090d16 42%, 
+    #f8fafc 16%, 
+    ${dna.secondaryColor} 32%, 
+    #090d16 44%, 
     ${dna.tertiaryColor} 50%, 
-    #090d16 58%, 
-    ${dna.secondaryColor} 72%, 
-    #f8fafc 86%, 
+    #090d16 56%, 
+    ${dna.secondaryColor} 68%, 
+    #f8fafc 84%, 
     ${dna.primaryColor} 100%)`
 
   return (
-    <div className="absolute inset-0 pointer-events-none" style={{ transformStyle: 'preserve-3d' }}>
-      {/* 22 Z-stacked rounded-[30px] metallic rim slices */}
+    <>
+      {/* 21 Z-stacked hollow rounded-[30px] metallic rim rings (background is transparent so center is never blocked) */}
       {slices.map((s, idx) => (
         <div
           key={idx}
           className="card-slab-slice"
           style={{
             transform: `translateZ(${s.z.toFixed(2)}px)`,
-            background: s.isCenterGroove
-              ? `linear-gradient(${115 + specShift}deg, #090d16 0%, ${dna.tertiaryColor} 50%, #090d16 100%)`
+            borderWidth: s.isCenterGroove ? '4px' : '5px',
+            borderStyle: 'solid',
+            borderColor: s.isCenterGroove
+              ? '#090d16'
               : s.isOuterRim
-              ? `linear-gradient(${135 + specShift}deg, ${dna.primaryColor}, #ffffff 45%, ${dna.secondaryColor} 80%, ${dna.primaryColor})`
-              : `linear-gradient(${125 + specShift}deg, ${dna.secondaryColor} 0%, ${dna.primaryColor} 38%, #e2e8f0 52%, ${dna.secondaryColor} 100%)`,
-            border: s.isCenterGroove
-              ? `1.5px solid #090d16`
-              : `1.5px solid ${s.isOuterRim ? dna.primaryColor : dna.secondaryColor}`,
-            boxShadow:
-              idx === 0 || idx === sliceCount - 1
-                ? `inset 0 0 6px rgba(255,255,255,0.45)`
-                : undefined,
+              ? dna.primaryColor
+              : dna.secondaryColor,
+            boxShadow: s.isOuterRim
+              ? `0 0 2px ${dna.primaryColor}`
+              : undefined,
           }}
         />
       ))}
 
-      {/* Right 18px Solid Metallic Spine with Laser-Etched Serial */}
+      {/* Right 20px Solid Metallic Spine (faces camera dead-on at 270°) */}
       <div
-        className="card-spine-right flex items-center justify-center overflow-hidden rounded-sm"
+        className="card-spine-right flex items-center justify-center rounded-sm"
         style={{
           background: spineGradient,
-          borderTop: `1px solid ${dna.primaryColor}`,
-          borderBottom: `1px solid ${dna.primaryColor}`,
-          boxShadow: 'inset 0 0 4px rgba(0,0,0,0.7)',
+          borderLeft: `1.5px solid ${dna.primaryColor}`,
+          borderRight: `1.5px solid ${dna.primaryColor}`,
         }}
       >
         <span
-          className="font-mono text-[7px] font-black tracking-[0.28em] text-white/85 whitespace-nowrap select-none"
+          className="font-mono text-[7px] font-black tracking-[0.22em] text-white whitespace-nowrap select-none"
           style={{
             writingMode: 'vertical-rl',
-            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.95)',
           }}
         >
-          X·PERSONA // {activeCode} // DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()} // AVATAR 30%
+          X·PERSONA // {activeCode} // DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()}
         </span>
       </div>
 
-      {/* Left 18px Solid Metallic Spine with Laser-Etched Serial */}
+      {/* Left 20px Solid Metallic Spine (faces camera dead-on at 90°) */}
       <div
-        className="card-spine-left flex items-center justify-center overflow-hidden rounded-sm"
+        className="card-spine-left flex items-center justify-center rounded-sm"
         style={{
           background: spineGradient,
-          borderTop: `1px solid ${dna.primaryColor}`,
-          borderBottom: `1px solid ${dna.primaryColor}`,
-          boxShadow: 'inset 0 0 4px rgba(0,0,0,0.7)',
+          borderLeft: `1.5px solid ${dna.primaryColor}`,
+          borderRight: `1.5px solid ${dna.primaryColor}`,
         }}
       >
         <span
-          className="font-mono text-[7px] font-black tracking-[0.28em] text-white/85 whitespace-nowrap select-none"
+          className="font-mono text-[7px] font-black tracking-[0.22em] text-white whitespace-nowrap select-none"
           style={{
             writingMode: 'vertical-rl',
-            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.95)',
           }}
         >
-          1-OF-1 PROCEDURAL SLAB // CHLADNI ({dna.chladniN.toFixed(1)},{dna.chladniM.toFixed(1)})
+          1-OF-1 FORGED SLAB // CHLADNI ({dna.chladniN.toFixed(1)},{dna.chladniM.toFixed(1)})
         </span>
       </div>
 
-      {/* Top & Bottom 18px Solid Metallic Spines */}
+      {/* Top & Bottom 20px Solid Metallic Spines */}
       <div
         className="card-spine-top rounded-sm"
         style={{
-          background: `linear-gradient(0deg, ${dna.primaryColor} 0%, #f8fafc 20%, #090d16 50%, #f8fafc 80%, ${dna.primaryColor} 100%)`,
+          background: `linear-gradient(${specShift}deg, ${dna.primaryColor} 0%, #f8fafc 22%, #090d16 50%, #f8fafc 78%, ${dna.secondaryColor} 100%)`,
+          borderTop: `1px solid ${dna.primaryColor}`,
+          borderBottom: `1px solid ${dna.primaryColor}`,
         }}
       />
       <div
         className="card-spine-bottom rounded-sm"
         style={{
-          background: `linear-gradient(0deg, ${dna.primaryColor} 0%, #f8fafc 20%, #090d16 50%, #f8fafc 80%, ${dna.primaryColor} 100%)`,
+          background: `linear-gradient(${specShift}deg, ${dna.primaryColor} 0%, #f8fafc 22%, #090d16 50%, #f8fafc 78%, ${dna.secondaryColor} 100%)`,
+          borderTop: `1px solid ${dna.primaryColor}`,
+          borderBottom: `1px solid ${dna.primaryColor}`,
         }}
       />
-    </div>
+
+      {/* 4 Rounded Corner Bevel Bridge Plates */}
+      <div className="card-corner-tr rounded-sm" style={{ background: spineGradient }} />
+      <div className="card-corner-br rounded-sm" style={{ background: spineGradient }} />
+      <div className="card-corner-tl rounded-sm" style={{ background: spineGradient }} />
+      <div className="card-corner-bl rounded-sm" style={{ background: spineGradient }} />
+    </>
   )
 }
 
@@ -481,8 +486,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
         ]
 
   const isLight = dna.isLightTheme
-  const panelBg = isLight ? 'rgba(255, 255, 255, 0.65)' : 'rgba(8, 10, 20, 0.55)'
-  const panelBorder = isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.14)'
+  const panelBg = isLight ? 'rgba(255, 255, 255, 0.78)' : 'rgba(8, 12, 24, 0.74)'
+  const panelBorder = isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)'
+  const cosY = Math.cos((rot.y * Math.PI) / 180)
+  const isEdgeOn = Math.abs(cosY) < 0.14
 
   return (
     <div className="flex flex-col items-center">
@@ -506,7 +513,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
             {
               transform: downloading
                 ? 'none'
-                : `perspective(1300px) rotateX(${rot.x.toFixed(2)}deg) rotateY(${rot.y.toFixed(2)}deg)`,
+                : `rotateX(${rot.x.toFixed(2)}deg) rotateY(${rot.y.toFixed(2)}deg)`,
               '--gx': `${glare.gx}%`,
               '--gy': `${glare.gy}%`,
               '--ha': `${glare.ha}deg`,
@@ -514,25 +521,21 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               '--card-glow': dna.borderColor,
             } as React.CSSProperties
           }
-          className="card-3d-root relative w-[348px] sm:w-[380px] h-[575px] rounded-[30px] card-metallic-bevel"
+          className="card-3d-root relative w-[348px] sm:w-[380px] h-[575px] rounded-[30px]"
         >
-          {/* 18px Physical 3D Extruded Metallic Slab Core */}
+          {/* 20px Physical 3D Extruded Metallic Slab Core (Direct fragment children of preserve-3d root) */}
           {!downloading && (
             <CardSlabThickness dna={dna} rotY={rot.y} activeCode={activeCode} />
           )}
 
-          {/* Dynamic Glare & Iridescent Shimmer */}
-          <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
-          <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
-
-          {/* ==================== FRONT FACE ==================== */}
+          {/* ==================== FRONT FACE (Z = +10px) ==================== */}
           <div
             className="card-face-front absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
             style={{
               border: `2.5px solid ${dna.borderColor}`,
-              boxShadow: `inset 0 0 18px ${dna.borderColor}`,
               color: dna.textColor,
-              visibility: isShowingBack && !downloading ? 'hidden' : 'visible',
+              display: downloading && isShowingBack ? 'none' : 'flex',
+              transform: downloading ? 'none' : undefined,
             }}
           >
             {/* Full-Bleed Generative Canvas Shader */}
@@ -540,6 +543,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
             {/* Ornamental Architectural SVG Border */}
             <ProceduralFrameOverlay dna={dna} />
+
+            {/* Specular Glare & Iridescent Shimmer inside 2D face */}
+            <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
+            <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
 
             {/* TOP BAR */}
             <div className="relative z-10 flex items-center justify-between border-b pb-2" style={{ borderColor: panelBorder }}>
@@ -651,9 +658,9 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               </div>
             </div>
 
-            {/* SIGNATURE QUOTE OR AWAKENED PASSIVE */}
+            {/* SIGNATURE QUOTE OR AWAKENED PASSIVE (no backdrop-filter so preserve-3d never flattens) */}
             <div
-              className="relative z-10 my-1.5 p-3 rounded-2xl text-center backdrop-blur-md"
+              className="relative z-10 my-1.5 p-3 rounded-2xl text-center"
               style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
             >
               {slot === 'fusion' && fusionPersona ? (
@@ -753,19 +760,28 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
             </div>
           </div>
 
-          {/* ==================== BACK FACE (VISIBLE WHEN DRAGGED PAST 90 DEG) ==================== */}
+          {/* ==================== BACK FACE (Z = -10px, VISIBLE PAST 90 DEG) ==================== */}
           <div
             className="card-face-back absolute inset-0 w-full h-full rounded-[30px] p-6 flex flex-col justify-between overflow-hidden"
             style={{
               border: `2.5px solid ${dna.borderColor}`,
-              boxShadow: `inset 0 0 18px ${dna.borderColor}`,
               color: dna.textColor,
-              visibility: isShowingBack ? 'visible' : 'hidden',
+              display: downloading && !isShowingBack ? 'none' : 'flex',
+              transform: downloading ? 'none' : undefined,
             }}
           >
-            {/* Generative Canvas Back Shader */}
-            <ProceduralPatternCanvas dna={dna} axes={activeAxes} isBack={true} />
+            {/* Full-Bleed 1-of-1 Generative Card Back Artwork (Chladni Damascus + Guilloché Rosettes + Lissajous + 24h Sunburst) */}
+            <ProceduralPatternCanvas
+              dna={dna}
+              axes={activeAxes}
+              isBack={true}
+              hourlyDistribution={features?.hourlyDistribution}
+            />
             <ProceduralFrameOverlay dna={dna} />
+
+            {/* Specular Glare & Iridescent Shimmer inside 2D back face */}
+            <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
+            <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
 
             {/* BACK TOP HEADER */}
             <div
@@ -776,20 +792,26 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                 <Cpu className="w-3.5 h-3.5" style={{ color: dna.primaryColor }} />
                 <span>
                   {slot === 'outer'
-                    ? '24H CIRCADIAN & RADAR'
+                    ? '1-OF-1 CHLADNI & CIRCADIAN TOTEM'
                     : slot === 'inner'
-                    ? '32-RAY SOUL MANDALA'
-                    : 'DUAL-WORLD INTERFERENCE'}
+                    ? '1-OF-1 32-RAY SOUL MANDALA'
+                    : '1-OF-1 DUAL-WORLD ALCHEMICAL SEAL'}
                 </span>
               </div>
-              <span className="text-[9px] font-mono" style={{ color: dna.mutedTextColor }}>
+              <span className="text-[9px] font-mono font-bold" style={{ color: dna.primaryColor }}>
                 SEED #{dna.seed.toString(16).slice(0, 6).toUpperCase()}
               </span>
             </div>
 
-            {/* CENTERPIECE BACK TOTEM */}
-            <div className="relative z-10 my-2 flex flex-col items-center justify-center">
-              <div className="p-3 rounded-full" style={{ backgroundColor: 'rgba(10, 12, 24, 0.78)' }}>
+            {/* CENTERPIECE 1-OF-1 PROCEDURAL BACK MANDALA / TOTEM */}
+            <div className="relative z-10 my-1 flex flex-col items-center justify-center">
+              <div
+                className="p-3 rounded-full"
+                style={{
+                  backgroundColor: isLight ? 'rgba(255, 255, 255, 0.55)' : 'rgba(8, 12, 24, 0.55)',
+                  border: `1.5px solid ${dna.borderColor}`,
+                }}
+              >
                 <ProceduralBackTotem
                   variant={slot}
                   axes={activeAxes}
@@ -811,30 +833,48 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                   }}
                 />
               </div>
-              <div className="text-center mt-2.5">
+              <div className="text-center mt-2">
                 <div className="font-mono text-xs font-bold">
                   {slot === 'outer'
-                    ? '24小时发帖生物钟与四维星轨'
+                    ? '专属克拉尼驻波 · 24h生物钟星轨图腾'
                     : slot === 'inner'
-                    ? '32道潜意识答卷光谱与荣格星盘'
-                    : '表里双界多边形干涉星盘'}
+                    ? '专属旋轮曼陀罗 · 32道潜意识光谱图腾'
+                    : '专属双界干涉场 · 炼金合成封印阵'}
                 </div>
-                <div className="text-[10px] mt-0.5" style={{ color: dna.mutedTextColor }}>
-                  {slot === 'outer'
-                    ? '外圈24根放射脉冲由你一天24小时的真实发推分布生成'
-                    : slot === 'inner'
-                    ? '外圈32道射线由你32题自评答案(1-5分)实时映射'
-                    : '实线为表世界推文人格，虚线为里世界潜意识真我'}
+                <div className="text-[9px] font-mono mt-0.5" style={{ color: dna.mutedTextColor }}>
+                  Ψ(x,y) = {dna.chladniA.toFixed(2)}·sin({dna.chladniN.toFixed(1)}πx)sin({dna.chladniM.toFixed(1)}πy) + {dna.chladniB.toFixed(2)}·cos({dna.chladniM.toFixed(1)}πx)cos({dna.chladniN.toFixed(1)}πy)
                 </div>
               </div>
             </div>
 
-            {/* BACK DATA PANELS */}
-            <div className="relative z-10">
+            {/* ENGRAVED GENERATIVE SIGNATURE & DATA PLAQUE */}
+            <div className="relative z-10 space-y-2">
+              {/* Mathematical Pattern DNA Bar */}
+              <div
+                className="px-3 py-2 rounded-xl flex items-center justify-between text-[10px] font-mono"
+                style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span style={{ color: dna.mutedTextColor }}>头像色权(30%):</span>
+                  <div className="flex items-center gap-1">
+                    {dna.avatarSwatches.slice(0, 4).map((hex, i) => (
+                      <span
+                        key={i}
+                        className="w-3 h-3 rounded-full border border-black/30"
+                        style={{ backgroundColor: hex }}
+                      />
+                    ))}
+                  </div>
+                </div>
+                <span style={{ color: dna.primaryColor }} className="font-bold">
+                  SYM-{dna.symmetryOrder} · LISSAJOUS {dna.lissajousKx}:{dna.lissajousKy}
+                </span>
+              </div>
+
               {slot === 'outer' && features && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div
-                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    className="p-2 rounded-xl"
                     style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                   >
                     <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
@@ -843,7 +883,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     <div className="text-sm font-bold font-mono">{features.burstinessFano}</div>
                   </div>
                   <div
-                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    className="p-2 rounded-xl"
                     style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                   >
                     <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
@@ -852,7 +892,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     <div className="text-sm font-bold font-mono">{features.nightOwlIndex}%</div>
                   </div>
                   <div
-                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    className="p-2 rounded-xl"
                     style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                   >
                     <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
@@ -861,7 +901,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     <div className="text-sm font-bold font-mono">{features.avgCharCount} 字</div>
                   </div>
                   <div
-                    className="p-2.5 rounded-xl backdrop-blur-md"
+                    className="p-2 rounded-xl"
                     style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                   >
                     <div className="text-[10px]" style={{ color: dna.mutedTextColor }}>
@@ -875,9 +915,9 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               )}
 
               {slot === 'inner' && (
-                <div className="space-y-2 text-xs">
+                <div className="space-y-1.5 text-xs">
                   <div
-                    className="p-3 rounded-xl backdrop-blur-md"
+                    className="p-2.5 rounded-xl"
                     style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                   >
                     <div className="text-[10px] font-mono font-bold mb-0.5" style={{ color: dna.primaryColor }}>
@@ -886,7 +926,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     <div className="text-[11px]">{innerArch.coreDesireZh}</div>
                   </div>
                   <div
-                    className="p-3 rounded-xl backdrop-blur-md"
+                    className="p-2.5 rounded-xl"
                     style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                   >
                     <div className="text-[10px] font-mono font-bold mb-0.5" style={{ color: dna.secondaryColor }}>
@@ -899,7 +939,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
               {slot === 'fusion' && fusionPersona && (
                 <div
-                  className="p-3.5 rounded-2xl backdrop-blur-md space-y-1.5 text-xs"
+                  className="p-3 rounded-2xl space-y-1 text-xs"
                   style={{ backgroundColor: panelBg, border: `1px solid ${panelBorder}` }}
                 >
                   <div className="flex items-center justify-between font-mono text-[11px] font-bold">
@@ -920,7 +960,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono"
               style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
             >
-              <span>PROCEDURAL BACKPRINT</span>
+              <span>1-OF-1 PROCEDURAL BACKPRINT</span>
               <span>@{profile.screenName}</span>
             </div>
           </div>
@@ -934,10 +974,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           <div className="px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
             <span className="flex items-center gap-1.5 text-purple-300">
               <Move3d className="w-3.5 h-3.5" />
-              <span>按住卡牌任意拖动 360° 观察正反面</span>
+              <span>按住卡牌任意拖动 360° 观察正反与侧边</span>
             </span>
-            <span className="text-slate-500">
-              {isShowingBack ? '背面' : '正面'} ({Math.round(((rot.y % 360) + 360) % 360)}°)
+            <span className="text-slate-400 font-bold">
+              {isEdgeOn ? '侧面 · 20mm金属脊' : isShowingBack ? '背面 · 专属图腾' : '正面 · 角色卡'} ({Math.round(((rot.y % 360) + 360) % 360)}°)
             </span>
           </div>
 
