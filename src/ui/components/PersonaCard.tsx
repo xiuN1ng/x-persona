@@ -179,18 +179,18 @@ const CARD_BASE_H = 575
 /**
  * Computes a smooth responsive scale factor for the canonical 380×575 3D card
  * so that Desktop, Tablet, and Mobile screens (from 320px width up to 4K)
- * render with exact proportions, zero clipping during 3D rotation, and tight layout bounds.
+ * fit 100% within a single viewport screen (100dvh) with zero vertical scrolling.
  */
 function useResponsiveCardScale(isGalleryMode: boolean): number {
   const compute = useCallback(() => {
     if (typeof window === 'undefined') return 1
-    const vw = window.innerWidth
-    const vh = window.innerHeight
+    const vw = window.visualViewport?.width || window.innerWidth
+    const vh = window.visualViewport?.height || window.innerHeight
 
     if (isGalleryMode) {
       if (vw < 768) {
         const availW = vw - 36
-        return Number(Math.max(0.68, Math.min(1, availW / CARD_BASE_W)).toFixed(3))
+        return Number(Math.max(0.62, Math.min(1, availW / CARD_BASE_W)).toFixed(3))
       }
       if (vw < 1200) {
         const availW = (Math.min(vw, 1152) - 64) / 2
@@ -200,13 +200,15 @@ function useResponsiveCardScale(isGalleryMode: boolean): number {
       return Number(Math.max(0.78, Math.min(0.95, availW / CARD_BASE_W)).toFixed(3))
     }
 
-    const horizontalMargin = vw < 400 ? 32 : vw < 640 ? 40 : 64
+    const horizontalMargin = vw < 400 ? 28 : vw < 640 ? 36 : 64
     const widthScale = (vw - horizontalMargin) / CARD_BASE_W
-    const verticalReserved = vw < 640 ? 220 : 245
-    const heightScale = vh > 520 ? (vh - verticalReserved) / CARD_BASE_H : 1
 
-    const rawScale = Math.min(1, widthScale, Math.max(0.76, heightScale))
-    const clamped = Math.max(0.68, Math.min(1, rawScale))
+    // Exact vertical chrome budget (Header + Switcher + 3-Slot Deck + Telemetry/Buttons/Drawer)
+    const verticalReserved = vw < 640 ? 264 : 330
+    const heightScale = (vh - verticalReserved) / CARD_BASE_H
+
+    const rawScale = Math.min(1, widthScale, heightScale)
+    const clamped = Math.max(0.5, Math.min(1, rawScale))
     return clamped > 0.98 ? 1 : Number(clamped.toFixed(3))
   }, [isGalleryMode])
 
@@ -216,7 +218,11 @@ function useResponsiveCardScale(isGalleryMode: boolean): number {
     const handleResize = () => setScale(compute())
     handleResize()
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    window.visualViewport?.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      window.visualViewport?.removeEventListener('resize', handleResize)
+    }
   }, [compute])
 
   return scale
@@ -799,11 +805,11 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
       {/* 360 DRAG TELEMETRY & EXPORT CONTROLS */}
       {interactive && (
-        <div className="w-full max-w-[380px] mt-3 sm:mt-4 space-y-2.5 sm:space-y-3 px-1 sm:px-0">
+        <div className="w-full max-w-[380px] mt-1.5 sm:mt-3 space-y-1.5 sm:space-y-2.5 px-1 sm:px-0">
           {/* Interactive Drag Telemetry Bar */}
-          <div className="px-2.5 sm:px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
+          <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
             <span className="flex items-center gap-1 sm:gap-1.5 text-purple-300 truncate">
-              <Move3d className="w-3.5 h-3.5 shrink-0" />
+              <Move3d className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
               <span className="hidden sm:inline">按住卡牌任意拖动 360° 观察正反与侧边</span>
               <span className="sm:hidden">拖动卡牌 360° 旋转观察</span>
             </span>
@@ -813,13 +819,13 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           </div>
 
           {/* Export & Share Buttons */}
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2">
             <button
               onClick={handleDownloadImage}
               disabled={downloading}
-              className="flex-1 py-2.5 px-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+              className="flex-1 py-2 sm:py-2.5 px-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
             >
-              <Download className="w-4 h-4 shrink-0" />
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               <span className="truncate">
                 {downloading
                   ? '正在渲染高清卡牌...'
@@ -831,7 +837,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               href={tweetIntentUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3.5 sm:px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors shrink-0"
+              className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors shrink-0"
             >
               <XIcon className="w-3.5 h-3.5" />
               <span>晒卡</span>
@@ -839,7 +845,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
             <button
               onClick={handleCopyLink}
-              className="px-3 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer shrink-0"
+              className="px-2.5 sm:px-3 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer shrink-0"
               title="复制链接"
             >
               {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -876,20 +882,20 @@ export const PersonaCard: React.FC = () => {
   const canFuse = hasInnerCard && !isFused
 
   return (
-    <div className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-1 sm:py-2 flex flex-col items-center">
+    <div className="w-full max-w-6xl mx-auto px-1.5 sm:px-4 py-0.5 sm:py-1 flex flex-col items-center">
       {/* ==================== 3-CARD DECK SLOT SELECTOR ==================== */}
-      <div className="w-full max-w-2xl mb-3 sm:mb-5">
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2.5 p-1 sm:p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
+      <div className="w-full max-w-2xl mb-1.5 sm:mb-3">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 p-1 sm:p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl">
           {/* SLOT 1: OUTER CYBER CARD */}
           <button
             onClick={() => setSelectedCardSlot('outer')}
-            className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
+            className={`p-1.5 sm:p-2 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
               selectedCardSlot === 'outer' && !showTrinityGallery
                 ? 'bg-purple-950/60 border-purple-500/60 shadow-md'
                 : 'bg-slate-950/50 border-slate-800/80 hover:border-slate-700'
             }`}
           >
-            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-purple-400 mb-0.5">
+            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-purple-400">
               <span className="truncate">
                 <span className="hidden sm:inline">CARD </span>I · 表世界
               </span>
@@ -914,7 +920,7 @@ export const PersonaCard: React.FC = () => {
                 setActiveTab('oejts')
               }
             }}
-            className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
+            className={`p-1.5 sm:p-2 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
               selectedCardSlot === 'inner' && !showTrinityGallery
                 ? 'bg-cyan-950/60 border-cyan-500/60 shadow-md'
                 : hasInnerCard
@@ -922,7 +928,7 @@ export const PersonaCard: React.FC = () => {
                 : 'bg-slate-950/30 border-dashed border-slate-800 hover:border-purple-500/50'
             }`}
           >
-            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-cyan-400 mb-0.5">
+            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-cyan-400">
               <span className="truncate">
                 <span className="hidden sm:inline">CARD </span>II · 里世界
               </span>
@@ -970,7 +976,7 @@ export const PersonaCard: React.FC = () => {
                 setActiveTab('oejts')
               }
             }}
-            className={`p-2 sm:p-2.5 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
+            className={`p-1.5 sm:p-2 rounded-xl text-left transition-all cursor-pointer border min-w-0 ${
               selectedCardSlot === 'fusion' && !showTrinityGallery
                 ? 'bg-amber-950/60 border-amber-500/70 shadow-md'
                 : isFused
@@ -980,7 +986,7 @@ export const PersonaCard: React.FC = () => {
                 : 'bg-slate-950/20 border-dashed border-slate-800/60 opacity-70'
             }`}
           >
-            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-amber-400 mb-0.5">
+            <div className="flex items-center justify-between gap-1 text-[9px] sm:text-[10px] font-mono text-amber-400">
               <span className="truncate">
                 <span className="hidden sm:inline">CARD </span>III · 融合
               </span>
@@ -1028,9 +1034,9 @@ export const PersonaCard: React.FC = () => {
           </button>
         </div>
 
-        {/* Sub-bar */}
+        {/* Sub-bar (shown on tablet/desktop where multi-column gallery fits) */}
         {hasInnerCard && (
-          <div className="flex items-center justify-end mt-2 px-1">
+          <div className="hidden sm:flex items-center justify-end mt-1.5 px-1">
             <button
               onClick={() => setShowTrinityGallery(!showTrinityGallery)}
               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-medium cursor-pointer transition-colors"
@@ -1068,9 +1074,9 @@ export const PersonaCard: React.FC = () => {
         </div>
       )}
 
-      {/* ==================== PROMINENT FUSION CALLOUT ==================== */}
+      {/* ==================== PROMINENT FUSION CALLOUT (Desktop/Tablet; on Mobile Slot 3 pulses directly) ==================== */}
       {canFuse && !isFusingAnimation && (
-        <div className="w-full max-w-md mb-4 sm:mb-5 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-purple-950/90 via-amber-950/80 to-cyan-950/90 border border-amber-400/60 shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="hidden sm:flex w-full max-w-md mb-3 p-3 rounded-2xl bg-gradient-to-r from-purple-950/90 via-amber-950/80 to-cyan-950/90 border border-amber-400/60 shadow-2xl items-center justify-between gap-4">
           <div>
             <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 shrink-0" />
@@ -1082,7 +1088,7 @@ export const PersonaCard: React.FC = () => {
           </div>
           <button
             onClick={triggerFusion}
-            className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs rounded-xl shrink-0 shadow-lg shadow-amber-500/30 cursor-pointer transition-transform hover:scale-105 text-center"
+            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs rounded-xl shrink-0 shadow-lg shadow-amber-500/30 cursor-pointer transition-transform hover:scale-105 text-center"
           >
             ⚡ 立即融合
           </button>
@@ -1150,13 +1156,13 @@ export const PersonaCard: React.FC = () => {
       )}
 
       {/* ==================== COLLAPSIBLE RAW STATS DRAWER ==================== */}
-      <div className="w-full max-w-[380px] mt-4 sm:mt-5 px-1 sm:px-0">
+      <div className="w-full max-w-[380px] mt-1.5 sm:mt-3 px-1 sm:px-0">
         <button
           onClick={() => setShowDetails(!showDetails)}
-          className="w-full py-2.5 px-4 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center justify-between transition-colors cursor-pointer"
+          className="w-full py-1.5 sm:py-2 px-3.5 sm:px-4 rounded-xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-[11px] sm:text-xs text-slate-400 flex items-center justify-between transition-colors cursor-pointer"
         >
           <span>查看底层推文特征与特质详情</span>
-          {showDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          {showDetails ? <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
         </button>
 
         {showDetails && (
