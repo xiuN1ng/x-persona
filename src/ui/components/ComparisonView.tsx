@@ -1,11 +1,14 @@
-import React, { useState } from 'react'
-import { ArrowLeft, Share2, Check, Scale, Eye, FileText } from 'lucide-react'
-import { XIcon } from './XIcon'
+import React, { useRef, useState } from 'react'
+import { ArrowLeft, Download, Copy, Check, Scale } from 'lucide-react'
+import { toPng } from 'html-to-image'
 import { usePersonaStore } from '../../store/usePersonaStore'
 import { buildShareUrl, buildTweetIntentUrl } from '../../share/url-state'
+import { XIcon } from './XIcon'
 
 export const ComparisonView: React.FC = () => {
   const { profile, persona, oejtsScores, comparison, setActiveTab } = usePersonaStore()
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
 
   if (!profile || !persona || !oejtsScores || !comparison) return null
@@ -28,8 +31,29 @@ export const ComparisonView: React.FC = () => {
     },
   }
   const shareUrl = typeof window !== 'undefined' ? buildShareUrl(shareState) : ''
-  const tweetText = `我的 X 推文推断人格是【${persona.code}】，自评人格是【${oejtsScores.type}】，人格知行合一指数为 ${comparison.consistencyIndex}%！看看你的网络人设反差多大：`
+  const tweetText = `我的 X 推文人格是【${persona.code}】，真实问卷自评是【${oejtsScores.type}】，知行合一指数 ${comparison.consistencyIndex}%！🎴 快来测测你的双面反差：`
   const tweetIntentUrl = buildTweetIntentUrl(tweetText, shareUrl)
+
+  const handleDownload = async () => {
+    if (!cardRef.current) return
+    setDownloading(true)
+    try {
+      await new Promise(r => setTimeout(r, 100))
+      const dataUrl = await toPng(cardRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+      })
+      const link = document.createElement('a')
+      link.download = `X-Persona-Compare-${profile.screenName}.png`
+      link.href = dataUrl
+      link.click()
+    } catch (err) {
+      console.error(err)
+      alert('导出失败，可直接截图分享')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const handleCopy = () => {
     navigator.clipboard.writeText(shareUrl)
@@ -38,156 +62,158 @@ export const ComparisonView: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-8">
-      <button
-        onClick={() => setActiveTab('report')}
-        className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white mb-6 transition-colors"
-      >
-        <ArrowLeft className="w-3.5 h-3.5" />
-        <span>返回我的 X 人格卡</span>
-      </button>
+    <div className="w-full max-w-xl mx-auto px-4 py-6 flex flex-col items-center">
+      <div className="w-full max-w-[390px] flex items-center justify-between mb-4">
+        <button
+          onClick={() => setActiveTab('report')}
+          className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>返回单张人格卡</span>
+        </button>
+        <span className="text-xs font-mono text-purple-400 font-bold">
+          DUAL-PERSPECTIVE
+        </span>
+      </div>
 
-      <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-10 shadow-2xl backdrop-blur">
-        {/* Header */}
-        <div className="text-center pb-8 border-b border-slate-800">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-950/60 border border-purple-800/50 text-purple-300 font-mono text-xs font-semibold mb-3">
-            <Scale className="w-3.5 h-3.5 text-purple-400" />
-            <span>双视角对照报告</span>
-          </div>
+      {/* ==================== DUAL SPLIT CARD ==================== */}
+      <div className="relative group">
+        <div className="absolute -inset-1.5 rounded-[36px] bg-gradient-to-r from-purple-500/20 via-pink-500/20 to-cyan-500/20 blur-2xl opacity-75" />
 
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
-            推文推断人格 vs 问卷自评人格
-          </h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-lg mx-auto">
-            别人眼里的你（推文大数据）与 你眼里的你（OEJTS 自评）到底差多远？
-          </p>
-        </div>
+        <div
+          ref={cardRef}
+          className="relative w-[360px] sm:w-[390px] rounded-[32px] bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 border border-purple-500/30 p-6 sm:p-7 shadow-2xl overflow-hidden backdrop-blur-xl flex flex-col justify-between"
+          style={{ minHeight: '560px' }}
+        >
+          {/* Subtle noise watermark */}
+          <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:16px_16px] pointer-events-none" />
 
-        {/* Consistency Score Badge */}
-        <div className="my-8 p-6 rounded-3xl bg-gradient-to-tr from-purple-950/60 via-slate-900 to-cyan-950/60 border border-purple-800/40 text-center">
-          <div className="text-xs font-mono text-slate-400 uppercase tracking-widest mb-1">
-            人格一致性指数 (Consistency Index)
-          </div>
-          <div className="text-5xl sm:text-6xl font-black font-mono tracking-tight bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent my-2">
-            {comparison.consistencyIndex}%
-          </div>
-          <p className="text-sm font-medium text-slate-200 max-w-xl mx-auto mt-3">
-            {comparison.summaryZh}
-          </p>
-        </div>
-
-        {/* Dual Type Confrontation Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-8">
-          {/* Side A: Timeline Inferred */}
-          <div className="p-5 rounded-2xl bg-slate-950 border border-purple-800/40">
-            <div className="flex items-center gap-2 text-xs font-mono text-purple-400 mb-2 font-bold">
-              <Eye className="w-4 h-4" />
-              <span>推特推文推断人格</span>
-            </div>
-            <div className="text-2xl font-black text-white font-mono">
-              {persona.code}
-            </div>
-            <div className="text-sm font-bold text-purple-300 mt-0.5">
-              {persona.archetype.nameZh}
-            </div>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              基于你近期的真实原创、回复互动、情绪波动与发帖作息算法推导。
-            </p>
-          </div>
-
-          {/* Side B: Self-assessed */}
-          <div className="p-5 rounded-2xl bg-slate-950 border border-cyan-800/40">
-            <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 mb-2 font-bold">
-              <FileText className="w-4 h-4" />
-              <span>问卷自评人格 (OEJTS)</span>
-            </div>
-            <div className="text-2xl font-black text-white font-mono">
-              {oejtsScores.type}
-            </div>
-            <div className="text-sm font-bold text-cyan-300 mt-0.5">
-              荣格 16 型人格自评
-            </div>
-            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              基于你对 32 道两极情境题目的直觉主观评分与标准计分公式得出。
-            </p>
-          </div>
-        </div>
-
-        {/* Dimensional Deltas Breakdown */}
-        <div className="my-8 space-y-4">
-          <h3 className="text-xs font-mono uppercase tracking-wider text-slate-500 font-semibold mb-3">
-            四维偏差对比详情
-          </h3>
-
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-            <div className="flex justify-between text-xs text-slate-300">
-              <span>场域表达: 广播/对话 vs 内倾/外倾</span>
-              <span className="font-mono text-purple-400">
-                推文: {persona.axes.field} | 自评: {oejtsScores.ieNormalized}
+          <div>
+            {/* Top Brand */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+              <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-slate-300">
+                <Scale className="w-3.5 h-3.5 text-purple-400" />
+                <span>X PERSONA · 双面镜像</span>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-300">
+                知行合一 {comparison.consistencyIndex}%
               </span>
             </div>
-            <div className="text-xs text-slate-400">
-              {comparison.fieldDiff > 10 ? '👉 你在推特上比自评更外向主动，互动更频繁！' : comparison.fieldDiff < -10 ? '👉 你在推特上比自评更克制独立，习惯单向广播。' : '👉 两者在社交维度高度吻合。'}
+
+            {/* User Profile Mini */}
+            <div className="flex items-center gap-3 mb-5">
+              {profile.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt={profile.name}
+                  crossOrigin="anonymous"
+                  className="w-10 h-10 rounded-xl border border-white/20 object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-purple-700 flex items-center justify-center font-bold text-white text-sm">
+                  {profile.name[0]}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-white text-sm truncate">{profile.name}</div>
+                <div className="text-[11px] font-mono text-slate-400">@{profile.screenName}</div>
+              </div>
+            </div>
+
+            {/* Big Dual-Face Split Display */}
+            <div className="grid grid-cols-2 gap-2.5 my-4">
+              {/* Left Face: Timeline Persona */}
+              <div className="p-4 rounded-2xl bg-purple-950/30 border border-purple-500/30 text-center">
+                <div className="text-[10px] font-mono text-purple-400 mb-1 font-semibold">
+                  别人眼里的你 (推文)
+                </div>
+                <div className="text-3xl my-1">{persona.archetype.badgeIcon}</div>
+                <div className="text-xl font-extrabold text-white font-mono">{persona.code}</div>
+                <div className="text-xs font-bold text-purple-300 mt-0.5">{persona.archetype.nameZh}</div>
+              </div>
+
+              {/* Right Face: Self Quiz Persona */}
+              <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/30 text-center">
+                <div className="text-[10px] font-mono text-cyan-400 mb-1 font-semibold">
+                  你眼里的你 (问卷)
+                </div>
+                <div className="text-3xl my-1">🧠</div>
+                <div className="text-xl font-extrabold text-white font-mono">{oejtsScores.type}</div>
+                <div className="text-xs font-bold text-cyan-300 mt-0.5">荣格 16 型人格</div>
+              </div>
+            </div>
+
+            {/* One-Liner Summary */}
+            <div className="my-4 p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 text-center">
+              <p className="text-xs font-medium text-slate-200 leading-relaxed">
+                {comparison.summaryZh}
+              </p>
+            </div>
+
+            {/* 4 Contrast Bars */}
+            <div className="space-y-2 py-3 border-t border-white/10 text-[11px] font-mono text-slate-400">
+              <div className="flex items-center justify-between">
+                <span>社交场域:</span>
+                <span className="text-slate-200">
+                  推文 {persona.axes.field} vs 自评 {oejtsScores.ieNormalized}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>思维密度:</span>
+                <span className="text-slate-200">
+                  推文 {persona.axes.density} vs 自评 {100 - oejtsScores.snNormalized}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>情绪温度:</span>
+                <span className="text-slate-200">
+                  推文 {persona.axes.temperature} vs 自评 {100 - oejtsScores.ftNormalized}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>生活节律:</span>
+                <span className="text-slate-200">
+                  推文 {persona.axes.rhythm} vs 自评 {oejtsScores.jpNormalized}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-            <div className="flex justify-between text-xs text-slate-300">
-              <span>思维密度: 长文/碎片 vs 直觉/感觉</span>
-              <span className="font-mono text-cyan-400">
-                推文: {persona.axes.density} | 自评: {100 - oejtsScores.snNormalized}
-              </span>
-            </div>
-            <div className="text-xs text-slate-400">
-              {comparison.densityDiff > 10 ? '👉 你在推特上倾向于短平快高频输出。' : comparison.densityDiff < -10 ? '👉 你在推特上展现了比平时更强的长文思辨深度。' : '👉 思维与行文密度高度吻合。'}
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-            <div className="flex justify-between text-xs text-slate-300">
-              <span>情绪温度: 冷静/情绪 vs 理性/情感</span>
-              <span className="font-mono text-pink-400">
-                推文: {persona.axes.temperature} | 自评: {100 - oejtsScores.ftNormalized}
-              </span>
-            </div>
-            <div className="text-xs text-slate-400">
-              {comparison.tempDiff > 10 ? '👉 推特是你的情绪释放阀，情感流露更浓烈。' : comparison.tempDiff < -10 ? '👉 你在推特上戴上了严谨理智的专业面具。' : '👉 情绪表达与自评高度吻合。'}
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-            <div className="flex justify-between text-xs text-slate-300">
-              <span>生活节律: 规律/随性 vs 判断/知觉</span>
-              <span className="font-mono text-emerald-400">
-                推文: {persona.axes.rhythm} | 自评: {oejtsScores.jpNormalized}
-              </span>
-            </div>
-            <div className="text-xs text-slate-400">
-              {comparison.rhythmDiff > 10 ? '👉 推特作息随性混沌，深夜脉冲式发帖明显。' : comparison.rhythmDiff < -10 ? '👉 发帖节律严谨克制，像定时时钟一样稳定。' : '👉 节律与生活习惯高度吻合。'}
-            </div>
+          {/* Card Footer */}
+          <div className="pt-3 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+            <span>xpersona.app</span>
+            <span>DUAL PERSPECTIVE · 2026</span>
           </div>
         </div>
+      </div>
 
-        {/* Share buttons */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-6 border-t border-slate-800">
-          <a
-            href={tweetIntentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-2.5 bg-sky-500 hover:bg-sky-400 text-white font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors shadow-md shadow-sky-500/20"
-          >
-            <XIcon className="w-3.5 h-3.5" />
-            <span>发推晒双视角对比</span>
-          </a>
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center justify-center gap-2.5 mt-6 w-full max-w-[390px]">
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          className="flex-1 py-3 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-2xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+        >
+          <Download className="w-4 h-4" />
+          <span>{downloading ? '导出中...' : '保存对比卡牌图片'}</span>
+        </button>
 
-          <button
-            onClick={handleCopy}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl flex items-center gap-1.5 transition-colors border border-slate-700"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
-            <span>{copied ? '已复制对比卡链接' : '复制对比卡链接'}</span>
-          </button>
-        </div>
+        <a
+          href={tweetIntentUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800 font-medium text-xs rounded-2xl flex items-center gap-1.5 transition-colors"
+        >
+          <XIcon className="w-3.5 h-3.5" />
+          <span>发推</span>
+        </a>
+
+        <button
+          onClick={handleCopy}
+          className="px-3.5 py-3 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-2xl flex items-center gap-1.5 text-xs transition-colors"
+        >
+          {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+        </button>
       </div>
     </div>
   )
