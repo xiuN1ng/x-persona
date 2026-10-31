@@ -10,11 +10,24 @@ import {
   Flame,
   LayoutGrid,
   Square,
-  Move3d
+  Move3d,
+  Film
 } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { usePersonaStore, type CardSlot } from '../../store/usePersonaStore'
-import { buildShareUrl, buildTweetIntentUrl } from '../../share/url-state'
+import {
+  buildShareUrl,
+  buildTweetIntentUrl,
+  OPEN_SOURCE_PAGE_URL,
+  OPEN_SOURCE_DISPLAY_HOST
+} from '../../share/url-state'
+import {
+  generateShowcasePosterBlob,
+  recordCard5sLoopVideo,
+  triggerBlobDownload,
+  copyPngBlobToClipboard,
+  tryNativeFileShare
+} from '../../share/card-media-exporter'
 import { INNER_ARCHETYPES } from '../../persona/inner-archetypes'
 import {
   computeGenerativeDNA,
@@ -260,6 +273,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const cardScale = useResponsiveCardScale(!interactive)
 
   const [downloading, setDownloading] = useState(false)
+  const [captureSide, setCaptureSide] = useState<'none' | 'front' | 'back'>('none')
+  const [recordingVideo, setRecordingVideo] = useState(false)
+  const [videoProgress, setVideoProgress] = useState(0)
+  const [shareToast, setShareToast] = useState<string | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
 
   // Free 360-degree orbital rotation state
@@ -469,34 +486,12 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   // Determine whether the viewer's current angle faces the front or back of the 3D plane
   const isShowingBack = Math.cos((rot.y * Math.PI) / 180) < 0
 
-  const handleDownloadImage = async () => {
-    if (!cardElementRef.current) return
-    setDownloading(true)
-    const savedRot = { ...rotRef.current }
-    // Snap to flat front or flat back depending on whichever side user is currently viewing!
-    const snapY = isShowingBack ? 180 : 0
-    setRot({ x: 0, y: snapY })
-    setGlare((prev) => ({ ...prev, op: 0 }))
-
-    try {
-      await new Promise((r) => setTimeout(r, 150))
-      const dataUrl = await toPng(cardElementRef.current, {
-        cacheBust: true,
-        pixelRatio: 2.5,
-      })
-      const link = document.createElement('a')
-      const sideLabel = isShowingBack ? 'BACK' : 'FRONT'
-      link.download = `X-Persona-${slot.toUpperCase()}-${sideLabel}-${profile.screenName}-${activeCode}.png`
-      link.href = dataUrl
-      link.click()
-    } catch (err) {
-      console.error('Failed to export card image', err)
-      alert('卡牌图片导出失败，可直接截屏保存')
-    } finally {
-      setRot(savedRot)
-      setDownloading(false)
-    }
-  }
+  const currentTitleZh =
+    slot === 'outer'
+      ? persona.displayTitleZh || outerArch.nameZh
+      : slot === 'inner'
+      ? innerArch.nameZh
+      : fusionPersona?.titleZh || outerArch.nameZh
 
   const shareState = {
     version: 1 as const,
@@ -522,21 +517,183 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       : undefined,
     isFused: Boolean(fusionPersona),
   }
-  const shareUrl = typeof window !== 'undefined' ? buildShareUrl(shareState) : ''
+  const shareUrl = typeof window !== 'undefined' ? buildShareUrl(shareState) : OPEN_SOURCE_PAGE_URL
 
   const shareText =
     slot === 'outer'
-      ? `我在 X 锻造了独一无二的【表世界·赛博面具卡：${persona.displayTitleZh || outerArch.nameZh} (${persona.code})】🎴 快来看看你的推文人格卡牌：`
+      ? `我在 X 锻造了专属【赛博面具卡：${currentTitleZh} (${persona.code})】🎴\n🌐 开源在线测卡：${OPEN_SOURCE_PAGE_URL}\n👇 我的专属卡牌镜像：`
       : slot === 'inner'
-      ? `我在 X 觉醒了【里世界·潜意识真我卡：${innerArch.nameZh} (${innerType})】🔮 看看你的内外反差：`
-      : `我将表里双界人格融合，炼成了传说级【${fusionPersona?.titleZh} (${activeCode})】✨ 知行同步率 ${fusionPersona?.consistencyIndex}%：`
+      ? `我在 X 觉醒了【潜意识真我卡：${innerArch.nameZh} (${innerType})】🔮\n🌐 开源在线测卡：${OPEN_SOURCE_PAGE_URL}\n👇 我的专属卡牌镜像：`
+      : `我将表里双界人格融合，炼成了传说级【${fusionPersona?.titleZh} (${activeCode})】✨ 知行同步率 ${fusionPersona?.consistencyIndex}%！\n🌐 开源在线测卡：${OPEN_SOURCE_PAGE_URL}\n👇 我的专属卡牌镜像：`
 
   const tweetIntentUrl = buildTweetIntentUrl(shareText, shareUrl)
 
+  const showTemporaryToast = (msg: string, duration = 6000) => {
+    setShareToast(msg)
+    setTimeout(() => {
+      setShareToast((prev) => (prev === msg ? null : prev))
+    }, duration)
+  }
+
+  // Helper to capture either 'front' or 'back' face of the card as a high-res PNG data URL
+  const captureFaceDataUrl = async (
+    side: 'front' | 'back',
+    pixelRatio = 2.4
+  ): Promise<string> => {
+    if (!cardElementRef.current) throw new Error('Card element not mounted')
+    setDownloading(true)
+    setCaptureSide(side)
+    setRot({ x: 0, y: side === 'back' ? 180 : 0 })
+    setGlare((prev) => ({ ...prev, op: 0 }))
+    await new Promise((r) => setTimeout(r, 120))
+    return toPng(cardElementRef.current, {
+      cacheBust: true,
+      pixelRatio,
+    })
+  }
+
+  const handleDownloadImage = async (openXIntentAfter = false) => {
+    if (!cardElementRef.current || downloading || recordingVideo) return
+    const savedRot = { ...rotRef.current }
+    const targetSide: 'front' | 'back' = isShowingBack ? 'back' : 'front'
+
+    try {
+      const rawCardDataUrl = await captureFaceDataUrl(targetSide, 2.4)
+      const { blob } = await generateShowcasePosterBlob(rawCardDataUrl, {
+        screenName: profile.screenName,
+        displayName: profile.name,
+        titleZh: currentTitleZh,
+        activeCode,
+        slot,
+        dna,
+      })
+
+      const sideLabel = targetSide === 'back' ? 'BACK' : 'FRONT'
+      const filename = `X-Persona-${slot.toUpperCase()}-${sideLabel}-${profile.screenName}-${activeCode}.png`
+
+      // 1. Copy image to clipboard (so desktop user can Ctrl+V directly into X post box)
+      const copiedImg = await copyPngBlobToClipboard(blob)
+      // 2. Also copy share text + open-source URL if clipboard image wasn't supported
+      if (!copiedImg && navigator.clipboard) {
+        navigator.clipboard.writeText(`${shareText}\n${shareUrl}`).catch(() => {})
+      }
+
+      // 3. Trigger local PNG download
+      triggerBlobDownload(blob, filename)
+
+      // 4. Restore 3D view before opening share sheet / X window
+      setCaptureSide('none')
+      setDownloading(false)
+      setRot(savedRot)
+
+      if (openXIntentAfter) {
+        const file = new File([blob], filename, { type: 'image/png' })
+        const sharedNatively = await tryNativeFileShare(
+          file,
+          `X-Persona · ${currentTitleZh}`,
+          shareText
+        )
+        if (!sharedNatively) {
+          window.open(tweetIntentUrl, '_blank', 'noopener,noreferrer')
+        }
+        showTemporaryToast(
+          copiedImg
+            ? '✨ 晒卡海报已自动复制并下载！在打开的 X 发帖框中直接按 Ctrl+V 即可粘贴图片'
+            : '✨ 晒卡海报已自动下载！在打开的 X 发帖框中拖入刚下载的海报图即可发布'
+        )
+      } else {
+        showTemporaryToast(
+          copiedImg
+            ? '✨ 高清展柜海报已下载并复制到剪贴板（去 X 直接 Ctrl+V 即可粘贴晒卡）'
+            : '✨ 高清展柜海报 (含开源 Pages 地址) 已保存到本地'
+        )
+      }
+    } catch (err) {
+      console.error('Failed to export card showcase image', err)
+      setCaptureSide('none')
+      setDownloading(false)
+      setRot(savedRot)
+      alert('卡牌海报生成失败，可直接截屏保存')
+    }
+  }
+
+  const handleRecord5sVideo = async () => {
+    if (!cardElementRef.current || downloading || recordingVideo) return
+    const savedRot = { ...rotRef.current }
+
+    try {
+      setRecordingVideo(true)
+      setVideoProgress(5)
+
+      // Step 1: Quickly capture crisp Front & Back faces (~250ms total)
+      const frontDataUrl = await captureFaceDataUrl('front', 2.0)
+      setVideoProgress(12)
+      const backDataUrl = await captureFaceDataUrl('back', 2.0)
+
+      // Restore 3D slab mode on screen so the user watches the live 5s 360° spin while recording!
+      setCaptureSide('none')
+      setDownloading(false)
+
+      const { blob, ext, mimeType } = await recordCard5sLoopVideo(
+        frontDataUrl,
+        backDataUrl,
+        {
+          screenName: profile.screenName,
+          displayName: profile.name,
+          titleZh: currentTitleZh,
+          activeCode,
+          slot,
+          dna,
+        },
+        (percent, angleDeg) => {
+          setVideoProgress(percent)
+          const rad = (angleDeg * Math.PI) / 180
+          const nextRot = { x: Math.sin(rad) * 7, y: angleDeg }
+          rotRef.current = nextRot
+          setRot(nextRot)
+        }
+      )
+
+      const filename = `X-Persona-5s-Loop-${slot.toUpperCase()}-${profile.screenName}-${activeCode}.${ext}`
+      triggerBlobDownload(blob, filename)
+
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(`${shareText}\n${shareUrl}`).catch(() => {})
+      }
+
+      setRecordingVideo(false)
+      setVideoProgress(0)
+      setRot(savedRot)
+
+      const videoFile = new File([blob], filename, { type: mimeType })
+      const sharedNatively = await tryNativeFileShare(
+        videoFile,
+        `X-Persona 5s 360° 炫光卡牌 · ${currentTitleZh}`,
+        shareText
+      )
+
+      if (!sharedNatively) {
+        showTemporaryToast(
+          `🎬 5秒 360° 循环视频 (.${ext}) 已下载！文案与开源 Pages 链接已复制，点击「晒卡」上传视频即可`,
+          8000
+        )
+      }
+    } catch (err) {
+      console.error('Failed to record 5s loop video', err)
+      setCaptureSide('none')
+      setDownloading(false)
+      setRecordingVideo(false)
+      setVideoProgress(0)
+      setRot(savedRot)
+      alert('当前浏览器环境暂不支持视频录制，请使用海报图晒卡')
+    }
+  }
+
   const handleCopyLink = () => {
     if (!shareUrl) return
-    navigator.clipboard.writeText(shareUrl)
+    navigator.clipboard.writeText(`${shareText}\n${shareUrl}`)
     setCopiedLink(true)
+    showTemporaryToast('🔗 专属卡牌镜像与开源 Pages 链接已复制到剪贴板！', 3500)
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
@@ -649,7 +806,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
             style={{
               border: `2px solid ${dna.borderColor}`,
               color: dna.textColor,
-              display: downloading && isShowingBack ? 'none' : 'flex',
+              display:
+                downloading && (captureSide === 'back' || (captureSide === 'none' && isShowingBack))
+                  ? 'none'
+                  : 'flex',
               transform: downloading ? 'none' : undefined,
             }}
           >
@@ -856,12 +1016,15 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               ))}
             </div>
 
-            {/* REFINED MINIMAL FOOTER */}
+            {/* REFINED MINIMAL FOOTER WITH OPEN-SOURCE PAGES URL */}
             <div
-              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[9px] font-mono tracking-widest px-0.5"
+              className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[8.5px] font-mono tracking-wider px-0.5"
               style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
             >
-              <span style={{ color: dna.primaryColor }}>{dna.rarityLabel}</span>
+              <span className="font-semibold" style={{ color: dna.primaryColor }}>
+                {dna.rarityLabel}
+              </span>
+              <span className="opacity-85">{OPEN_SOURCE_DISPLAY_HOST}</span>
               <span>No.{dna.seed.toString(16).slice(0, 6).toUpperCase()}</span>
             </div>
           </div>
@@ -872,7 +1035,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
             style={{
               border: `2px solid ${dna.borderColor}`,
               color: dna.textColor,
-              display: downloading && !isShowingBack ? 'none' : 'block',
+              display:
+                downloading && (captureSide === 'front' || (captureSide === 'none' && !isShowingBack))
+                  ? 'none'
+                  : 'block',
               transform: downloading ? 'none' : undefined,
             }}
           >
@@ -917,39 +1083,67 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
             </span>
           </div>
 
-          {/* Export & Share Buttons */}
+          {/* Export & Share Buttons: Poster PNG + 5s 360° Looping Video + Auto-Share to X */}
           <div className="flex items-center justify-center gap-1.5 sm:gap-2">
             <button
-              onClick={handleDownloadImage}
-              disabled={downloading}
-              className="flex-1 py-2 sm:py-2.5 px-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+              onClick={() => handleDownloadImage(false)}
+              disabled={downloading || recordingVideo}
+              className="flex-1 py-2 sm:py-2.5 px-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:opacity-95 disabled:opacity-50 text-white font-bold text-[11px] sm:text-xs rounded-xl flex items-center justify-center gap-1 shadow-lg shadow-purple-600/25 transition-all cursor-pointer"
+              title="生成带个人身份与开源 Pages 地址的高清展柜海报，并自动复制到剪贴板"
             >
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <Download className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">
-                {downloading
-                  ? '正在渲染高清卡牌...'
-                  : `保存当前${isShowingBack ? '卡背' : '卡面'} (PNG)`}
+                {downloading && !recordingVideo
+                  ? '正在生成海报...'
+                  : `海报图 (${isShowingBack ? '背' : '正'})`}
               </span>
             </button>
 
-            <a
-              href={tweetIntentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 font-medium text-xs rounded-xl flex items-center gap-1.5 transition-colors shrink-0"
+            <button
+              onClick={handleRecord5sVideo}
+              disabled={downloading || recordingVideo}
+              className="flex-1 py-2 sm:py-2.5 px-2 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:opacity-95 disabled:opacity-50 text-slate-950 font-black text-[11px] sm:text-xs rounded-xl flex items-center justify-center gap-1 shadow-lg shadow-amber-500/25 transition-all cursor-pointer"
+              title="自动录制 5 秒 360° 正反面炫光循环视频（含开源 Pages 地址）"
+            >
+              <Film className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">
+                {recordingVideo ? `录制中 ${videoProgress}%` : '5s 循环视频'}
+              </span>
+            </button>
+
+            <button
+              onClick={() => handleDownloadImage(true)}
+              disabled={downloading || recordingVideo}
+              className="px-2.5 sm:px-3.5 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-slate-100 border border-slate-700 font-bold text-[11px] sm:text-xs rounded-xl flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+              title="自动生成海报图复制到剪贴板，并携带开源 Pages 地址跳转到 X 晒卡"
             >
               <XIcon className="w-3.5 h-3.5" />
               <span>晒卡</span>
-            </a>
+            </button>
 
             <button
               onClick={handleCopyLink}
-              className="px-2.5 sm:px-3 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer shrink-0"
-              title="复制链接"
+              className="px-2 sm:px-2.5 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl flex items-center text-xs transition-colors cursor-pointer shrink-0"
+              title="复制专属卡牌镜像与开源 Pages 地址"
             >
               {copiedLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
+
+          {/* Live Share Toast / Helper Notice */}
+          {shareToast && (
+            <div className="px-3 py-2 rounded-xl bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 text-[11px] flex items-center justify-between gap-2 shadow-lg">
+              <span className="leading-snug">{shareToast}</span>
+              <a
+                href={tweetIntentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold text-[10px] shrink-0 hover:bg-emerald-400 transition-colors"
+              >
+                去 X 发帖
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
