@@ -8,7 +8,7 @@ describe('Feature Engineering & Persona Inference', () => {
     {
       id: '1',
       createdAt: '2026-10-29T03:00:00Z',
-      createdTimestamp: 1793242800, // 3 AM night owl
+      createdTimestamp: Math.floor(new Date(2026, 9, 29, 3, 0, 0).getTime() / 1000), // 3 AM local
       text: '深夜写了一篇关于人工智能大模型的思考，真的很震撼，太喜欢这个方向了！',
       lang: 'zh',
       isReply: false,
@@ -26,7 +26,7 @@ describe('Feature Engineering & Persona Inference', () => {
     {
       id: '2',
       createdAt: '2026-10-29T10:00:00Z',
-      createdTimestamp: 1793268000,
+      createdTimestamp: Math.floor(new Date(2026, 9, 29, 10, 0, 0).getTime() / 1000),
       text: '@user2 完全同意你的观点！继续加油！',
       lang: 'zh',
       isReply: true,
@@ -77,8 +77,9 @@ describe('Feature Engineering & Persona Inference', () => {
     // Profile A: Disciplined daytime long-form Chinese tech analyst (BEAK)
     const techAnalystPosts: Post[] = Array.from({ length: 12 }, (_, i) => ({
       id: `tech-${i}`,
-      createdAt: '2026-10-20T02:00:00Z', // 10:00 AM UTC+8
-      createdTimestamp: 1792461600 + i * 86400, // exact 24h regular cadence
+      createdAt: '2026-10-20T10:00:00Z',
+      // Exact 10:00 AM local time every day (regular circadian window, 0% night owl)
+      createdTimestamp: Math.floor(new Date(2026, 9, 1 + i, 10, 0, 0).getTime() / 1000),
       text: '今天深入拆解了分布式推理系统的底层架构与显存带宽瓶颈。通过对比 KV Cache 量化与投机采样在不同 Batch Size 下的吞吐量曲线，可以清晰看到算力利用率的分水岭。完整技术报告与开源基准测试代码见链接 https://example.com/bench',
       lang: 'zh',
       isReply: false,
@@ -95,11 +96,15 @@ describe('Feature Engineering & Persona Inference', () => {
     }))
 
     // Profile B: Night-owl interactive community conversationalist (CSFD)
+    const nightHours = [1, 2, 3, 4, 5, 23, 0, 2, 4, 1, 3, 5]
+    const dayOffsets = [0, 0, 0, 4, 4, 5, 9, 9, 9, 15, 15, 22]
     const nightSalonPosts: Post[] = Array.from({ length: 12 }, (_, i) => ({
       id: `salon-${i}`,
-      createdAt: '2026-10-20T19:00:00Z',
-      // 03:00 AM local time with bursty intervals
-      createdTimestamp: 1792522800 + (i % 3 === 0 ? i * 180000 : i * 1200),
+      createdAt: '2026-10-20T03:00:00Z',
+      // Timezone-independent local night-owl hours with erratic multi-day bursts
+      createdTimestamp: Math.floor(
+        new Date(2026, 9, 1 + dayOffsets[i], nightHours[i], (i * 17) % 60, 0).getTime() / 1000
+      ),
       text: `@friend_${i} 哈哈哈笑死我了！！这波真的太绝了，你们觉得呢？🎉🔥`,
       lang: 'zh',
       isReply: i % 2 === 0,
