@@ -10,24 +10,32 @@ const ZH_POSITIVE_WORDS = new Set([
   '喜欢', '开心', '太棒', '赞', '牛逼', '厉害', '神作', '爱了', '支持', '期待',
   '优秀', '舒服', '感谢', '希望', '惊喜', '漂亮', '酷', '棒', '干货', '真香',
   '好玩', '快乐', '佩服', '好评', '美滋滋', '享受', '给力', '震撼', '好用', '财富自由',
+  '哈哈', '哈哈哈', '笑死', '绝了', '太爽', '优雅', '惊艳', '丝滑', '起飞', '感动',
+  '温暖', '治愈', '幸福', '可爱', '太强', '神仙', '吹爆', '泪目', '太顶', '狂喜',
 ])
 
 const ZH_NEGATIVE_WORDS = new Set([
   '垃圾', '恶心', '难受', '崩溃', '无语', '离谱', '讨厌', '糟糕', '傻逼', '坑爹',
   '失望', '焦虑', '痛苦', '破防', '晦气', '避雷', '差评', '完蛋', '绝望', '愤怒',
   '烦人', '抱怨', '倒闭', '操蛋', '吐了', '累瘫', '被坑', '不行', '倒霉', '心碎',
+  '麻了', '卧槽', '救命', '抓狂', '窒息', '服了', '扯淡', '割韭菜', '魔幻', '离大谱',
+  '无奈', '头大', '血压', '智障', '荒谬', '累了', '困死', '烦死', '苦笑', '叹气',
 ])
 
 const EN_POSITIVE_WORDS = new Set([
   'great', 'awesome', 'love', 'amazing', 'happy', 'cool', 'good', 'best', 'fantastic',
   'super', 'nice', 'wonderful', 'excellent', 'excited', 'fun', 'enjoy', 'brilliant',
   'impressive', 'promising', 'glad', 'huge', 'win', 'gem', 'legend', 'beautiful',
+  'lol', 'lmao', 'goat', 'fire', 'based', 'blessed', 'hyped', 'incredible', 'sweet',
+  'insane', 'peak', 'masterpiece', 'hilarious', 'vibe', 'vibes', 'adore', 'grateful',
 ])
 
 const EN_NEGATIVE_WORDS = new Set([
   'bad', 'hate', 'terrible', 'worst', 'awful', 'sad', 'angry', 'sucks', 'annoying',
   'broken', 'horrible', 'waste', 'disaster', 'scam', 'fail', 'trash', 'pain', 'disappointed',
   'boring', 'mess', 'stupid', 'ridiculous', 'ugly', 'tired', 'crazy',
+  'wtf', 'omg', 'cooked', 'cringe', 'cursed', 'doomed', 'exhausted', 'frustrated',
+  'toxic', 'bullshit', 'nightmare', 'pathetic', 'weird', 'hell', 'dying', 'rip',
 ])
 
 export function extractSentimentFeatures(posts: Post[]): SentimentFeatures {
@@ -59,6 +67,10 @@ export function extractSentimentFeatures(posts: Post[]): SentimentFeatures {
       if (text.includes(w)) neg++
     }
 
+    // Expressive punctuation / modal cues in X posts
+    if (/[~～]{2,}|[！!]{2,}/.test(text)) pos += 0.5
+    if (/[？\?]{2,}|\.{4,}|。。。/.test(text)) neg += 0.5
+
     // English word token match
     const enTokens = text.match(/[a-z]+/g) || []
     for (const token of enTokens) {
@@ -73,8 +85,8 @@ export function extractSentimentFeatures(posts: Post[]): SentimentFeatures {
     }
 
     scores.push(score)
-    if (score > 0.15) positiveCount++
-    else if (score < -0.15) negativeCount++
+    if (score > 0.12) positiveCount++
+    else if (score < -0.12) negativeCount++
   }
 
   const validCount = scores.length || 1

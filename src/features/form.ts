@@ -16,6 +16,7 @@ export interface FormFeatures {
 
 // Regex for common emojis
 const EMOJI_REGEX = /[\p{Extended_Pictographic}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu
+const CJK_REGEX = /[\u4e00-\u9fff\u3040-\u30ff]/
 
 export function extractFormFeatures(posts: Post[]): FormFeatures {
   const total = posts.length
@@ -45,25 +46,38 @@ export function extractFormFeatures(posts: Post[]): FormFeatures {
   let hashtagCount = 0
   let mentionCount = 0
 
-  let totalChars = 0
+  let authoredCount = 0
+  let totalAuthoredChars = 0
+  let totalAllChars = 0
   let totalEmojis = 0
 
   for (const post of posts) {
+    const rawText = (post.text || '').trim()
+    // Strip URLs when measuring genuine writing length on X
+    const cleanText = rawText.replace(/https?:\/\/\S+/g, '').trim()
+    const textLen = cleanText.length || rawText.length
+    totalAllChars += textLen
+
     if (post.isRetweet) {
       retweetCount++
-    } else if (post.isReply) {
-      replyCount++
-    } else if (post.isQuote) {
-      quoteCount++
     } else {
-      originalCount++
-    }
+      authoredCount++
+      totalAuthoredChars += textLen
 
-    const textLen = (post.text || '').trim().length
-    totalChars += textLen
+      const isCjk = CJK_REGEX.test(cleanText)
+      // On X, 110+ Chinese characters (~250 English chars equivalent) is a substantive long post/thread
+      const longThreshold = isCjk ? 110 : 210
+      if (textLen >= longThreshold) {
+        longPostCount++
+      }
 
-    if (textLen >= 300) {
-      longPostCount++
+      if (post.isReply) {
+        replyCount++
+      } else if (post.isQuote) {
+        quoteCount++
+      } else {
+        originalCount++
+      }
     }
 
     if (post.hasMedia) mediaCount++
@@ -71,24 +85,30 @@ export function extractFormFeatures(posts: Post[]): FormFeatures {
     if (post.hashtags && post.hashtags.length > 0) hashtagCount++
     if (post.mentions && post.mentions.length > 0) mentionCount++
 
-    const emojis = post.text ? post.text.match(EMOJI_REGEX) : null
+    const emojis = rawText ? rawText.match(EMOJI_REGEX) : null
     if (emojis) {
       totalEmojis += emojis.length
     }
   }
 
   const toPercent = (n: number) => Math.round((n / total) * 100)
+  const authoredBase = authoredCount > 0 ? authoredCount : total
+  const avgCharCount =
+    authoredCount > 0
+      ? Math.round(totalAuthoredChars / authoredCount)
+      : Math.round(totalAllChars / total)
 
   // Emojis per 100 characters
-  const emojiDensity = totalChars > 0 ? Number(((totalEmojis / totalChars) * 100).toFixed(1)) : 0
+  const emojiDensity =
+    totalAllChars > 0 ? Number(((totalEmojis / totalAllChars) * 100).toFixed(1)) : 0
 
   return {
     originalRate: toPercent(originalCount),
     replyRate: toPercent(replyCount),
     retweetRate: toPercent(retweetCount),
     quoteRate: toPercent(quoteCount),
-    avgCharCount: Math.round(totalChars / total),
-    longPostRate: toPercent(longPostCount),
+    avgCharCount,
+    longPostRate: Math.round((longPostCount / authoredBase) * 100),
     mediaRate: toPercent(mediaCount),
     linkRate: toPercent(linkCount),
     hashtagRate: toPercent(hashtagCount),

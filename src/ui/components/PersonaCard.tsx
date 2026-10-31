@@ -526,7 +526,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
   const shareText =
     slot === 'outer'
-      ? `我在 X 锻造了独一无二的【表世界·赛博面具卡：${outerArch.nameZh} (${persona.code})】🎴 快来看看你的推文人格卡牌：`
+      ? `我在 X 锻造了独一无二的【表世界·赛博面具卡：${persona.displayTitleZh || outerArch.nameZh} (${persona.code})】🎴 快来看看你的推文人格卡牌：`
       : slot === 'inner'
       ? `我在 X 觉醒了【里世界·潜意识真我卡：${innerArch.nameZh} (${innerType})】🔮 看看你的内外反差：`
       : `我将表里双界人格融合，炼成了传说级【${fusionPersona?.titleZh} (${activeCode})】✨ 知行同步率 ${fusionPersona?.consistencyIndex}%：`
@@ -696,19 +696,19 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
               {/* EDITORIAL TITLE & USER IDENTITY */}
               <div className="mt-1.5 text-center w-full">
-                <h2 className="text-[22px] font-black tracking-wider leading-tight">
+                <h2 className="text-[20px] font-black tracking-wider leading-tight truncate px-1">
                   {slot === 'outer'
-                    ? outerArch.nameZh
+                    ? persona.displayTitleZh || outerArch.nameZh
                     : slot === 'inner'
                     ? innerArch.nameZh
                     : fusionPersona?.titleZh}
                 </h2>
                 <div
-                  className="text-[10px] font-mono uppercase tracking-[0.2em] mt-0.5 font-medium"
+                  className="text-[9px] font-mono uppercase tracking-[0.16em] mt-0.5 font-medium truncate px-2"
                   style={{ color: dna.primaryColor }}
                 >
                   {slot === 'outer'
-                    ? outerArch.nameEn
+                    ? `${persona.modifierEn} · ${outerArch.nameEn}`
                     : slot === 'inner'
                     ? `${innerArch.nameEn} · ${innerArch.arcanaZh}`
                     : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
@@ -1003,7 +1003,7 @@ export const PersonaCard: React.FC = () => {
               </span>
             </div>
             <div className="font-bold text-[11px] sm:text-xs text-white truncate">
-              {persona.archetype.badgeIcon} {persona.archetype.nameZh}
+              {persona.archetype.badgeIcon} {persona.displayTitleZh || persona.archetype.nameZh}
             </div>
             <div className="text-[9px] sm:text-[10px] font-mono text-slate-400 truncate">
               推文 [{persona.code}]

@@ -152,7 +152,7 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
 
           const features = computeFeatureVector(cached.posts)
           const axes = computeAxisScores(features)
-          const persona = determineArchetype(axes)
+          const persona = determineArchetype(axes, features)
           set({
             profile: resolvedProfile,
             posts: cached.posts,
@@ -218,7 +218,7 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
 
       const features = computeFeatureVector(posts)
       const axes = computeAxisScores(features)
-      const persona = determineArchetype(axes)
+      const persona = determineArchetype(axes, features)
       const prefilledAnswers = computePrefillAnswers(axes, features)
 
       set({
@@ -294,10 +294,13 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
       rhythm: output.axis.rhythm,
     }
     const archetype = ARCHETYPES[output.archetype] || persona.archetype
+    const baseUpdated = determineArchetype(newAxes, get().features || undefined)
     const updatedPersona: PersonaResult = {
+      ...baseUpdated,
       code: output.archetype,
       axes: newAxes,
       archetype,
+      displayTitleZh: `${baseUpdated.modifierZh}·${archetype.nameZh}`,
     }
 
     // Re-compute comparison & fusion if inner card already exists
@@ -378,10 +381,13 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
     if (!shared) return false
 
     const archetype = ARCHETYPES[shared.archetypeCode] || ARCHETYPES.CSFD
+    const baseOuter = determineArchetype(shared.axes)
     const outerPersona: PersonaResult = {
+      ...baseOuter,
       code: shared.archetypeCode,
       axes: shared.axes,
       archetype,
+      displayTitleZh: `${baseOuter.modifierZh}·${archetype.nameZh}`,
     }
 
     let oejtsScores: OejtsScores | null = null
