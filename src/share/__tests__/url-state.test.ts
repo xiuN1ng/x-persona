@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { encodeShareState, decodeShareState, type ShareState } from '../url-state'
+import {
+  encodeShareState,
+  decodeShareState,
+  buildShareUrl,
+  buildTweetIntentUrl,
+  OPEN_SOURCE_PAGE_URL,
+  type ShareState
+} from '../url-state'
 
-describe('URL Hash Share State', () => {
-  it('round-trips state cleanly with LZString compression', () => {
+describe('URL Hash Share State & Open-Source Pages Link', () => {
+  it('round-trips state cleanly with LZString compression and carries public Pages URL', () => {
     const originalState: ShareState = {
       version: 1,
       profile: {
@@ -31,5 +38,13 @@ describe('URL Hash Share State', () => {
 
     const decoded = decodeShareState(encoded)
     expect(decoded).toEqual(originalState)
+
+    const shareUrl = buildShareUrl(originalState)
+    expect(shareUrl).toContain(OPEN_SOURCE_PAGE_URL)
+    expect(shareUrl).toContain('#r=')
+
+    const intentUrl = buildTweetIntentUrl(`测卡地址：${OPEN_SOURCE_PAGE_URL}`, shareUrl)
+    expect(intentUrl).toContain('https://x.com/intent/post')
+    expect(intentUrl).toContain(encodeURIComponent(OPEN_SOURCE_PAGE_URL))
   })
 })

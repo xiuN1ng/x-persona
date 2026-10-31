@@ -2,6 +2,9 @@ import LZString from 'lz-string'
 import type { AxisScores } from '../persona/axes'
 import type { PersonaLlmOutput } from '../llm/schema'
 
+export const OPEN_SOURCE_PAGE_URL = 'https://xiun1ng.github.io/x-persona/'
+export const OPEN_SOURCE_DISPLAY_HOST = 'xiun1ng.github.io/x-persona'
+
 export interface ShareState {
   version: 1;
   profile: {
@@ -52,15 +55,25 @@ export function decodeShareState(encodedHash: string): ShareState | null {
   }
 }
 
-export function buildShareUrl(state: ShareState): string {
-  const hash = encodeShareState(state)
-  const origin = window.location.origin
-  const pathname = window.location.pathname
-  return `${origin}${pathname}#r=${hash}`
+export function getPublicPageBaseUrl(): string {
+  if (typeof window === 'undefined') return OPEN_SOURCE_PAGE_URL
+  const host = window.location.hostname
+  if (host === 'localhost' || host === '127.0.0.1' || host.startsWith('192.168.')) {
+    return OPEN_SOURCE_PAGE_URL
+  }
+  const base = `${window.location.origin}${window.location.pathname}`
+  return base.endsWith('/') ? base : `${base}/`
 }
 
-export function buildTweetIntentUrl(text: string, shareUrl: string): string {
+export function buildShareUrl(state: ShareState): string {
+  const hash = encodeShareState(state)
+  const baseUrl = getPublicPageBaseUrl()
+  return `${baseUrl}#r=${hash}`
+}
+
+export function buildTweetIntentUrl(text: string, shareUrl?: string): string {
+  const targetUrl = shareUrl || OPEN_SOURCE_PAGE_URL
   const encodedText = encodeURIComponent(text)
-  const encodedUrl = encodeURIComponent(shareUrl)
+  const encodedUrl = encodeURIComponent(targetUrl)
   return `https://x.com/intent/post?text=${encodedText}&url=${encodedUrl}`
 }
