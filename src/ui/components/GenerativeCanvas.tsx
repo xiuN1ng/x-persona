@@ -907,62 +907,58 @@ export const ProceduralPatternCanvas: React.FC<{
     const rng = createRng(dna.seed ^ (isBack ? 0x9e3779b9 : 0x13579bdf))
     const noise2D = createSeededNoise2D(dna.seed ^ (isBack ? 0x85ebca6b : 0xc2b2ae35))
 
-    // 1. Rich Avatar-Infused Base Gradient
+    // 1. Pre-render static high-detail luxury gradient & curl-noise silk streamlines onto an offscreen canvas
+    const offscreen = document.createElement('canvas')
+    offscreen.width = W * dpr
+    offscreen.height = H * dpr
+    const sCtx = offscreen.getContext('2d')
+    if (!sCtx) return
+    sCtx.setTransform(dpr, 0, 0, dpr, 0, 0)
+
     const angleRad = ((dna.seed % 180) * Math.PI) / 180
     const gx1 = W * 0.5 - Math.cos(angleRad) * W * 0.5
     const gy1 = H * 0.5 - Math.sin(angleRad) * H * 0.5
     const gx2 = W * 0.5 + Math.cos(angleRad) * W * 0.5
     const gy2 = H * 0.5 + Math.sin(angleRad) * H * 0.5
 
-    const baseGrad = ctx.createLinearGradient(gx1, gy1, gx2, gy2)
+    const baseGrad = sCtx.createLinearGradient(gx1, gy1, gx2, gy2)
     baseGrad.addColorStop(0, dna.bgBase)
     baseGrad.addColorStop(0.52, dna.bgSecondary)
     baseGrad.addColorStop(1, dna.bgBase)
-    ctx.fillStyle = baseGrad
-    ctx.fillRect(0, 0, W, H)
+    sCtx.fillStyle = baseGrad
+    sCtx.fillRect(0, 0, W, H)
 
-    // 2. Dual Asymmetric Ambient Auras (tinted by Primary + Secondary Avatar Swatches)
     const glowY = isBack ? H * 0.5 : H * 0.29
     const [pr, pg, pb] = parseHexToRgb(dna.primaryColor)
     const [sr, sg, sb] = parseHexToRgb(dna.secondaryColor)
     const [tr, tg, tb] = parseHexToRgb(dna.tertiaryColor)
 
-    const radGrad1 = ctx.createRadialGradient(W * 0.5, glowY, 8, W * 0.5, glowY, 240)
-    radGrad1.addColorStop(0, `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.20 : 0.28})`)
-    radGrad1.addColorStop(0.55, `rgba(${sr}, ${sg}, ${sb}, ${dna.isLightTheme ? 0.08 : 0.12})`)
-    radGrad1.addColorStop(1, 'rgba(0, 0, 0, 0)')
-    ctx.fillStyle = radGrad1
-    ctx.fillRect(0, 0, W, H)
-
-    // Secondary corner aura driven by peakHour position
     const cornerX = (dna.peakHour % 2 === 0 ? 0.2 : 0.8) * W
     const cornerY = (dna.peakHour < 12 ? 0.18 : 0.82) * H
-    const radGrad2 = ctx.createRadialGradient(cornerX, cornerY, 5, cornerX, cornerY, 190)
+    const radGrad2 = sCtx.createRadialGradient(cornerX, cornerY, 5, cornerX, cornerY, 190)
     radGrad2.addColorStop(0, `rgba(${tr}, ${tg}, ${tb}, ${dna.isLightTheme ? 0.14 : 0.18})`)
     radGrad2.addColorStop(1, 'rgba(0, 0, 0, 0)')
-    ctx.fillStyle = radGrad2
-    ctx.fillRect(0, 0, W, H)
+    sCtx.fillStyle = radGrad2
+    sCtx.fillRect(0, 0, W, H)
 
-    // 3. Archetype-Specific Structural Underlay
     if (dna.flowFamily === 'laminar-grid') {
-      ctx.strokeStyle = `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.09 : 0.11})`
-      ctx.lineWidth = 0.6
+      sCtx.strokeStyle = `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.09 : 0.11})`
+      sCtx.lineWidth = 0.6
       const step = Math.round(W / dna.gridDensity)
       for (let x = step; x < W; x += step) {
-        ctx.beginPath()
-        ctx.moveTo(x, 18)
-        ctx.lineTo(x, H - 18)
-        ctx.stroke()
+        sCtx.beginPath()
+        sCtx.moveTo(x, 18)
+        sCtx.lineTo(x, H - 18)
+        sCtx.stroke()
       }
       for (let y = step; y < H; y += step) {
-        ctx.beginPath()
-        ctx.moveTo(18, y)
-        ctx.lineTo(W - 18, y)
-        ctx.stroke()
+        sCtx.beginPath()
+        sCtx.moveTo(18, y)
+        sCtx.lineTo(W - 18, y)
+        sCtx.stroke()
       }
     }
 
-    // 4. Seeded Curl-Noise Silk Streamlines
     const lineCount = isBack ? Math.round(dna.flowLineCount * 0.75) : dna.flowLineCount
     const freq = dna.flowFrequency
     const turb = dna.flowTurbulence
@@ -973,8 +969,8 @@ export const ProceduralPatternCanvas: React.FC<{
       const steps = 44 + Math.floor(rng() * 36)
       const stepLen = 3.8
 
-      ctx.beginPath()
-      ctx.moveTo(x, y)
+      sCtx.beginPath()
+      sCtx.moveTo(x, y)
 
       for (let s = 0; s < steps; s++) {
         let angle = 0
@@ -997,7 +993,7 @@ export const ProceduralPatternCanvas: React.FC<{
 
         x += Math.cos(angle) * stepLen
         y += Math.sin(angle) * stepLen
-        ctx.lineTo(x, y)
+        sCtx.lineTo(x, y)
 
         if (x < -10 || x > W + 10 || y < -10 || y > H + 10) break
       }
@@ -1006,61 +1002,160 @@ export const ProceduralPatternCanvas: React.FC<{
       const alpha = dna.isLightTheme
         ? 0.08 + (i % 5) * 0.018
         : 0.09 + (i % 5) * 0.024
-      ctx.strokeStyle =
+      sCtx.strokeStyle =
         colorChoice === 0
           ? `rgba(${pr}, ${pg}, ${pb}, ${alpha})`
           : colorChoice === 1
           ? `rgba(${sr}, ${sg}, ${sb}, ${alpha})`
           : `rgba(${tr}, ${tg}, ${tb}, ${alpha})`
-      ctx.lineWidth = i % 6 === 0 ? 1.2 : 0.7
-      ctx.stroke()
+      sCtx.lineWidth = i % 6 === 0 ? 1.2 : 0.7
+      sCtx.stroke()
     }
 
-    // 5. Multi-Node Social Network Constellation
+    // 2. Pre-generate animated Constellation Nodes & Drifting Stardust Motes
+    const nodes: Array<{
+      baseX: number;
+      baseY: number;
+      r: number;
+      phase: number;
+      speed: number;
+    }> = []
     if (dna.networkNodeCount > 0 && !isBack) {
-      const nodes: Array<{ x: number; y: number; r: number }> = []
       for (let i = 0; i < dna.networkNodeCount; i++) {
         nodes.push({
-          x: 28 + rng() * (W - 56),
-          y: 36 + rng() * (H - 72),
+          baseX: 28 + rng() * (W - 56),
+          baseY: 36 + rng() * (H - 72),
           r: 1.3 + rng() * 1.9,
+          phase: rng() * Math.PI * 2,
+          speed: 0.8 + rng() * 1.2,
         })
       }
+    }
 
-      ctx.lineWidth = 0.65
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dist = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y)
-          if (dist < 110) {
-            const linkAlpha = (1 - dist / 110) * (dna.isLightTheme ? 0.16 : 0.22)
-            ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, ${linkAlpha.toFixed(3)})`
-            ctx.beginPath()
-            ctx.moveTo(nodes[i].x, nodes[i].y)
-            ctx.lineTo(nodes[j].x, nodes[j].y)
-            ctx.stroke()
+    const pCount = isBack ? Math.max(20, Math.round(dna.particleCount * 0.7)) : Math.max(24, dna.particleCount)
+    const motes = Array.from({ length: pCount }, () => ({
+      x: 20 + rng() * (W - 40),
+      y: 20 + rng() * (H - 40),
+      r: 0.8 + rng() * 1.6,
+      baseAlpha: dna.isLightTheme ? 0.18 + rng() * 0.24 : 0.24 + rng() * 0.38,
+      vy: 0.18 + rng() * 0.35,
+      ampX: 6 + rng() * 10,
+      phase: rng() * Math.PI * 2,
+      colorType: Math.floor(rng() * 3),
+    }))
+
+    let animId: number | null = null
+    const startTime = performance.now()
+
+    const renderAnimatedFrame = (now: number) => {
+      const t = (now - startTime) * 0.001 // seconds
+
+      // Blit cached static streamline canvas
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.clearRect(0, 0, W * dpr, H * dpr)
+      ctx.drawImage(offscreen, 0, 0)
+      ctx.restore()
+
+      // Breathing Core Radial Aura
+      const breathe = 0.5 + 0.5 * Math.sin(t * 2.1)
+      const auraRadius = 215 + breathe * 42
+      const radGrad1 = ctx.createRadialGradient(W * 0.5, glowY, 6, W * 0.5, glowY, auraRadius)
+      const coreAlpha = (dna.isLightTheme ? 0.18 : 0.26) + breathe * 0.10
+      radGrad1.addColorStop(0, `rgba(${pr}, ${pg}, ${pb}, ${coreAlpha.toFixed(3)})`)
+      radGrad1.addColorStop(0.55, `rgba(${sr}, ${sg}, ${sb}, ${(coreAlpha * 0.42).toFixed(3)})`)
+      radGrad1.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.fillStyle = radGrad1
+      ctx.fillRect(0, 0, W, H)
+
+      // On Card Back: Rotating Celestial Astrolabe Light Beams
+      if (isBack) {
+        ctx.save()
+        ctx.translate(W * 0.5, H * 0.5)
+        ctx.rotate(t * 0.38)
+        const beamGrad = ctx.createLinearGradient(-160, 0, 160, 0)
+        beamGrad.addColorStop(0, 'rgba(0,0,0,0)')
+        beamGrad.addColorStop(0.5, `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.10 : 0.16})`)
+        beamGrad.addColorStop(1, 'rgba(0,0,0,0)')
+        ctx.fillStyle = beamGrad
+        ctx.fillRect(-160, -18, 320, 36)
+        ctx.rotate(Math.PI * 0.5)
+        ctx.fillRect(-160, -14, 320, 28)
+        ctx.restore()
+      }
+
+      // Animated Social Network Constellation + Traveling Data Packets (Front Face)
+      if (nodes.length > 0 && !isBack) {
+        const liveNodes = nodes.map((nd) => ({
+          x: nd.baseX + Math.cos(t * nd.speed + nd.phase) * 5.5,
+          y: nd.baseY + Math.sin(t * nd.speed + nd.phase) * 5.5,
+          r: nd.r,
+          phase: nd.phase,
+        }))
+
+        ctx.lineWidth = 0.7
+        for (let i = 0; i < liveNodes.length; i++) {
+          for (let j = i + 1; j < liveNodes.length; j++) {
+            const n1 = liveNodes[i]
+            const n2 = liveNodes[j]
+            const dist = Math.hypot(n1.x - n2.x, n1.y - n2.y)
+            if (dist < 112) {
+              const linkAlpha = (1 - dist / 112) * (dna.isLightTheme ? 0.17 : 0.24)
+              ctx.strokeStyle = `rgba(${tr}, ${tg}, ${tb}, ${linkAlpha.toFixed(3)})`
+              ctx.beginPath()
+              ctx.moveTo(n1.x, n1.y)
+              ctx.lineTo(n2.x, n2.y)
+              ctx.stroke()
+
+              // Traveling energy pulse packet along selected constellation edges
+              if ((i + j) % 3 === 0) {
+                const prog = ((t * 0.55 + (i * 0.27)) % 1 + 1) % 1
+                const px = n1.x + (n2.x - n1.x) * prog
+                const py = n1.y + (n2.y - n1.y) * prog
+                ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${(linkAlpha * 2.8).toFixed(3)})`
+                ctx.beginPath()
+                ctx.arc(px, py, 1.5, 0, Math.PI * 2)
+                ctx.fill()
+              }
+            }
           }
+        }
+
+        for (const nd of liveNodes) {
+          const pulse = 0.7 + 0.3 * Math.sin(t * 3 + nd.phase)
+          ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${((dna.isLightTheme ? 0.30 : 0.42) * pulse).toFixed(3)})`
+          ctx.beginPath()
+          ctx.arc(nd.x, nd.y, nd.r * (0.85 + 0.25 * pulse), 0, Math.PI * 2)
+          ctx.fill()
         }
       }
 
-      for (const nd of nodes) {
-        ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${dna.isLightTheme ? 0.28 : 0.38})`
+      // Drifting & Twinkling Luminous Stardust Motes
+      for (const m of motes) {
+        const curY = 20 + ((((m.y - 20 - t * m.vy * 22) % (H - 40)) + (H - 40)) % (H - 40))
+        const curX = m.x + Math.sin(t * 1.4 + m.phase) * m.ampX
+        const twinkle = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * 2.8 + m.phase))
+        const alpha = (m.baseAlpha * twinkle).toFixed(3)
+
+        ctx.fillStyle =
+          m.colorType === 0
+            ? `rgba(${pr}, ${pg}, ${pb}, ${alpha})`
+            : m.colorType === 1
+            ? `rgba(${sr}, ${sg}, ${sb}, ${alpha})`
+            : `rgba(${tr}, ${tg}, ${tb}, ${alpha})`
         ctx.beginPath()
-        ctx.arc(nd.x, nd.y, nd.r, 0, Math.PI * 2)
+        ctx.arc(curX, curY, m.r * (0.8 + 0.35 * twinkle), 0, Math.PI * 2)
         ctx.fill()
       }
+
+      animId = requestAnimationFrame(renderAnimatedFrame)
     }
 
-    // 6. Luminous Stardust Particles
-    const pCount = isBack ? Math.round(dna.particleCount * 0.5) : dna.particleCount
-    for (let i = 0; i < pCount; i++) {
-      const px = 20 + rng() * (W - 40)
-      const py = 20 + rng() * (H - 40)
-      const pradius = 0.7 + rng() * 1.4
-      const pAlpha = dna.isLightTheme ? 0.16 + rng() * 0.22 : 0.20 + rng() * 0.34
-      ctx.fillStyle = `rgba(${pr}, ${pg}, ${pb}, ${pAlpha.toFixed(2)})`
-      ctx.beginPath()
-      ctx.arc(px, py, pradius, 0, Math.PI * 2)
-      ctx.fill()
+    // Render initial frame synchronously, then continue smooth 60fps loop
+    renderAnimatedFrame(startTime)
+
+    return () => {
+      if (animId !== null) cancelAnimationFrame(animId)
     }
   }, [dna, isBack])
 
@@ -1095,72 +1190,86 @@ function renderSigilGeometryByArchitecture(
       const teeth = dna.symmetryOrder * 2
       return (
         <g>
-          {/* Eccentric Off-Center Sub-Dial Rings */}
-          <circle
-            cx={cx - 8}
-            cy={cy - 6}
-            r={maxR * 0.72}
-            fill="none"
-            stroke={dna.secondaryColor}
-            strokeOpacity="0.45"
-            strokeWidth="1.1"
-            strokeDasharray="8 4 2 4"
-          />
-          <circle
-            cx={cx + 8}
-            cy={cy + 6}
-            r={maxR * 0.68}
-            fill="none"
-            stroke={dna.primaryColor}
-            strokeOpacity="0.45"
-            strokeWidth="1.1"
-            strokeDasharray="12 3 3 3"
-          />
-          {/* Mechanical Gear Teeth Ring */}
-          {Array.from({ length: teeth }).map((_, i) => {
-            const a = (i / teeth) * Math.PI * 2
-            const r1 = maxR * 0.56
-            const r2 = i % 2 === 0 ? maxR * 0.64 : maxR * 0.59
-            return (
-              <line
-                key={i}
-                x1={cx + Math.cos(a) * r1}
-                y1={cy + Math.sin(a) * r1}
-                x2={cx + Math.cos(a) * r2}
-                y2={cy + Math.sin(a) * r2}
-                stroke={dna.primaryColor}
-                strokeOpacity="0.65"
-                strokeWidth="1.8"
-              />
-            )
-          })}
+          {/* Counter-Rotating Eccentric Off-Center Sub-Dial Rings */}
+          <g className="sigil-orbit-ccw-slow">
+            <circle
+              cx={cx - 8}
+              cy={cy - 6}
+              r={maxR * 0.72}
+              fill="none"
+              stroke={dna.secondaryColor}
+              strokeOpacity="0.52"
+              strokeWidth="1.15"
+              strokeDasharray="8 4 2 4"
+            />
+            <circle
+              cx={cx + 8}
+              cy={cy + 6}
+              r={maxR * 0.68}
+              fill="none"
+              stroke={dna.primaryColor}
+              strokeOpacity="0.52"
+              strokeWidth="1.15"
+              strokeDasharray="12 3 3 3"
+            />
+          </g>
+          {/* Rotating Mechanical Gear Teeth Ring */}
+          <g className="sigil-orbit-cw-med">
+            {Array.from({ length: teeth }).map((_, i) => {
+              const a = (i / teeth) * Math.PI * 2
+              const r1 = maxR * 0.56
+              const r2 = i % 2 === 0 ? maxR * 0.64 : maxR * 0.59
+              return (
+                <line
+                  key={i}
+                  x1={cx + Math.cos(a) * r1}
+                  y1={cy + Math.sin(a) * r1}
+                  x2={cx + Math.cos(a) * r2}
+                  y2={cy + Math.sin(a) * r2}
+                  stroke={dna.primaryColor}
+                  strokeOpacity="0.72"
+                  strokeWidth="1.8"
+                />
+              )
+            })}
+          </g>
           {/* 4-Point Sharp Astrolabe Compass Blades */}
-          {[0, 90, 180, 270].map((deg) => {
-            const rad = ((deg + (dna.seed % 30)) * Math.PI) / 180
-            const tipX = cx + Math.cos(rad) * (maxR - 4)
-            const tipY = cy + Math.sin(rad) * (maxR - 4)
-            const leftX = cx + Math.cos(rad - 0.18) * 38
-            const leftY = cy + Math.sin(rad - 0.18) * 38
-            const rightX = cx + Math.cos(rad + 0.18) * 38
-            const rightY = cy + Math.sin(rad + 0.18) * 38
-            return (
-              <polygon
-                key={deg}
-                points={`${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`}
-                fill={dna.primaryColor}
-                fillOpacity="0.22"
-                stroke={dna.foilColor}
-                strokeWidth="1"
-              />
-            )
-          })}
-          {/* Personal 4-Axis Radar Fingerprint */}
+          <g className="sigil-breathe">
+            {[0, 90, 180, 270].map((deg) => {
+              const rad = ((deg + (dna.seed % 30)) * Math.PI) / 180
+              const tipX = cx + Math.cos(rad) * (maxR - 4)
+              const tipY = cy + Math.sin(rad) * (maxR - 4)
+              const leftX = cx + Math.cos(rad - 0.18) * 38
+              const leftY = cy + Math.sin(rad - 0.18) * 38
+              const rightX = cx + Math.cos(rad + 0.18) * 38
+              const rightY = cy + Math.sin(rad + 0.18) * 38
+              return (
+                <polygon
+                  key={deg}
+                  points={`${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`}
+                  fill={dna.primaryColor}
+                  fillOpacity="0.22"
+                  stroke={dna.foilColor}
+                  strokeWidth="1"
+                />
+              )
+            })}
+          </g>
+          {/* Personal 4-Axis Radar Fingerprint with Animated Energy Flow */}
           <polygon
             points={radarPts}
             fill={dna.primaryColor}
             fillOpacity="0.14"
             stroke={dna.foilColor}
-            strokeWidth="1.3"
+            strokeOpacity="0.45"
+            strokeWidth="1.1"
+          />
+          <polygon
+            points={radarPts}
+            fill="none"
+            stroke={dna.foilColor}
+            strokeWidth="1.5"
+            className="sigil-energy-flow"
           />
         </g>
       )
@@ -1173,18 +1282,30 @@ function renderSigilGeometryByArchitecture(
       const polyMid = buildStarPolygramPoints(cx, cy, maxR * 0.68, nSides, 1, Math.PI / nSides)
       return (
         <g>
-          {/* Laser Crosshairs */}
-          <line x1={cx - maxR} y1={cy} x2={cx + maxR} y2={cy} stroke={dna.primaryColor} strokeOpacity="0.35" strokeWidth="0.9" strokeDasharray="4 3" />
-          <line x1={cx} y1={cy - maxR} x2={cx} y2={cy + maxR} stroke={dna.primaryColor} strokeOpacity="0.35" strokeWidth="0.9" strokeDasharray="4 3" />
-          {/* Nested Isometric Polygons */}
-          <polygon points={polyOuter} fill={dna.secondaryColor} fillOpacity="0.10" stroke={dna.primaryColor} strokeWidth="1.4" />
-          <polygon points={polyMid} fill="none" stroke={dna.tertiaryColor} strokeOpacity="0.7" strokeWidth="1.1" strokeDasharray="6 2" />
+          {/* Pulsing Laser Crosshairs */}
+          <line x1={cx - maxR} y1={cy} x2={cx + maxR} y2={cy} stroke={dna.primaryColor} strokeOpacity="0.42" strokeWidth="0.9" className="sigil-energy-flow" />
+          <line x1={cx} y1={cy - maxR} x2={cx} y2={cy + maxR} stroke={dna.primaryColor} strokeOpacity="0.42" strokeWidth="0.9" className="sigil-energy-flow" />
+          {/* Counter-Rotating Nested Isometric Polygons */}
+          <g className="sigil-orbit-cw-slow">
+            <polygon points={polyOuter} fill={dna.secondaryColor} fillOpacity="0.10" stroke={dna.primaryColor} strokeWidth="1.4" />
+          </g>
+          <g className="sigil-orbit-ccw-med">
+            <polygon points={polyMid} fill="none" stroke={dna.tertiaryColor} strokeOpacity="0.78" strokeWidth="1.15" strokeDasharray="6 2" />
+          </g>
           {/* Personal 4-Axis Radar Fingerprint */}
           <polygon
             points={radarPts}
             fill={`url(#roseFill-${dna.seed})`}
             stroke={dna.foilColor}
-            strokeWidth="1.6"
+            strokeOpacity="0.48"
+            strokeWidth="1.2"
+          />
+          <polygon
+            points={radarPts}
+            fill="none"
+            stroke={dna.foilColor}
+            strokeWidth="1.65"
+            className="sigil-energy-flow"
           />
           {secondaryRadarPts && (
             <polygon
@@ -1201,39 +1322,50 @@ function renderSigilGeometryByArchitecture(
     }
 
     case 'orbital-constellation': {
-      // 3 Tilted 3D Elliptical Planetary Orbits (Atomic Orrery) + Star Nodes
+      // 3 Tilted 3D Elliptical Planetary Orbits (Atomic Orrery) + Actively Orbiting Star Nodes
       const tiltBase = (dna.seed % 60) - 30
       return (
         <g>
-          {[0, 60, 120].map((rot, idx) => (
-            <g key={rot} transform={`rotate(${rot + tiltBase} ${cx} ${cy})`}>
-              <ellipse
-                cx={cx}
-                cy={cy}
-                rx={maxR * 0.88}
-                ry={maxR * (0.34 + (idx * 0.08))}
-                fill="none"
-                stroke={idx === 0 ? dna.foilColor : idx === 1 ? dna.primaryColor : dna.secondaryColor}
-                strokeOpacity="0.72"
-                strokeWidth={idx === 0 ? '1.35' : '1.0'}
-              />
-              <circle
-                cx={cx + maxR * 0.88 * Math.cos(idx * 2.1)}
-                cy={cy + maxR * (0.34 + idx * 0.08) * Math.sin(idx * 2.1)}
-                r="3.2"
-                fill={dna.foilColor}
-                stroke={dna.primaryColor}
-                strokeWidth="1"
-              />
-            </g>
-          ))}
+          {[0, 60, 120].map((rot, idx) => {
+            const rx = maxR * 0.88
+            const ry = maxR * (0.34 + idx * 0.08)
+            const orbitPath = `M ${cx - rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A ${rx} ${ry} 0 1 0 ${cx - rx} ${cy}`
+            return (
+              <g key={rot} transform={`rotate(${rot + tiltBase} ${cx} ${cy})`}>
+                <ellipse
+                  cx={cx}
+                  cy={cy}
+                  rx={rx}
+                  ry={ry}
+                  fill="none"
+                  stroke={idx === 0 ? dna.foilColor : idx === 1 ? dna.primaryColor : dna.secondaryColor}
+                  strokeOpacity="0.72"
+                  strokeWidth={idx === 0 ? '1.35' : '1.0'}
+                />
+                {/* Actively Orbiting Planetary Satellite Node */}
+                <circle
+                  r="3.4"
+                  fill={dna.foilColor}
+                  stroke={dna.primaryColor}
+                  strokeWidth="1.1"
+                >
+                  <animateMotion
+                    dur={`${7 + idx * 2.5}s`}
+                    repeatCount="indefinite"
+                    path={orbitPath}
+                  />
+                </circle>
+              </g>
+            )
+          })}
           {/* Personal 4-Axis Radar Fingerprint */}
           <polygon
             points={radarPts}
             fill={dna.primaryColor}
             fillOpacity="0.15"
             stroke={dna.tertiaryColor}
-            strokeWidth="1.2"
+            strokeWidth="1.3"
+            className="sigil-energy-flow"
           />
         </g>
       )
@@ -1252,19 +1384,22 @@ function renderSigilGeometryByArchitecture(
       )
       return (
         <g>
-          <path
-            d={spiroPath}
-            fill={`url(#roseFill-${dna.seed})`}
-            stroke={dna.primaryColor}
-            strokeOpacity="0.82"
-            strokeWidth="1.15"
-          />
+          <g className="sigil-orbit-cw-slow">
+            <path
+              d={spiroPath}
+              fill={`url(#roseFill-${dna.seed})`}
+              stroke={dna.primaryColor}
+              strokeOpacity="0.82"
+              strokeWidth="1.15"
+            />
+          </g>
           <polygon
             points={radarPts}
             fill="none"
             stroke={dna.foilColor}
-            strokeOpacity="0.85"
-            strokeWidth="1.35"
+            strokeOpacity="0.9"
+            strokeWidth="1.45"
+            className="sigil-energy-flow"
           />
         </g>
       )
@@ -1276,36 +1411,40 @@ function renderSigilGeometryByArchitecture(
       const diamondPts = `${cx},${cy - maxR * 0.88} ${cx + maxR * 0.72},${cy} ${cx},${cy + maxR * 0.88} ${cx - maxR * 0.72},${cy}`
       return (
         <g>
-          {/* Asymmetric Corona Burst Rays */}
-          {Array.from({ length: flareCount }).map((_, i) => {
-            const a = (i / flareCount) * Math.PI * 2
-            const r1 = 34
-            const r2 =
-              i % 3 === 0
-                ? maxR * 0.88
-                : i % 2 === 0
-                ? maxR * 0.68
-                : maxR * 0.52
-            return (
-              <line
-                key={i}
-                x1={cx + Math.cos(a) * r1}
-                y1={cy + Math.sin(a) * r1}
-                x2={cx + Math.cos(a) * r2}
-                y2={cy + Math.sin(a) * r2}
-                stroke={i % 3 === 0 ? dna.foilColor : dna.primaryColor}
-                strokeOpacity={i % 3 === 0 ? '0.68' : '0.32'}
-                strokeWidth={i % 3 === 0 ? '1.3' : '0.75'}
-              />
-            )
-          })}
-          {/* Eclipse Crescent Halo */}
-          <circle cx={cx} cy={cy} r={maxR * 0.66} fill={dna.primaryColor} fillOpacity="0.22" stroke={dna.foilColor} strokeWidth="1.4" />
-          <circle cx={cx + 7} cy={cy - 6} r={maxR * 0.58} fill={dna.bgBase} fillOpacity="0.82" />
+          {/* Rotating Asymmetric Corona Burst Rays */}
+          <g className="sigil-orbit-cw-slow">
+            {Array.from({ length: flareCount }).map((_, i) => {
+              const a = (i / flareCount) * Math.PI * 2
+              const r1 = 34
+              const r2 =
+                i % 3 === 0
+                  ? maxR * 0.88
+                  : i % 2 === 0
+                  ? maxR * 0.68
+                  : maxR * 0.52
+              return (
+                <line
+                  key={i}
+                  x1={cx + Math.cos(a) * r1}
+                  y1={cy + Math.sin(a) * r1}
+                  x2={cx + Math.cos(a) * r2}
+                  y2={cy + Math.sin(a) * r2}
+                  stroke={i % 3 === 0 ? dna.foilColor : dna.primaryColor}
+                  strokeOpacity={i % 3 === 0 ? '0.68' : '0.32'}
+                  strokeWidth={i % 3 === 0 ? '1.3' : '0.75'}
+                />
+              )
+            })}
+          </g>
+          {/* Breathing Eclipse Crescent Halo */}
+          <g className="sigil-breathe">
+            <circle cx={cx} cy={cy} r={maxR * 0.66} fill={dna.primaryColor} fillOpacity="0.22" stroke={dna.foilColor} strokeWidth="1.4" />
+            <circle cx={cx + 7} cy={cy - 6} r={maxR * 0.58} fill={dna.bgBase} fillOpacity="0.82" />
+          </g>
           {/* Monolith Diamond Frame */}
           <polygon points={diamondPts} fill="none" stroke={dna.primaryColor} strokeWidth="1.3" />
           {/* Personal Radar */}
-          <polygon points={radarPts} fill={dna.secondaryColor} fillOpacity="0.16" stroke={dna.foilColor} strokeWidth="1.2" />
+          <polygon points={radarPts} fill={dna.secondaryColor} fillOpacity="0.16" stroke={dna.foilColor} strokeWidth="1.35" className="sigil-energy-flow" />
         </g>
       )
     }
@@ -1333,10 +1472,16 @@ function renderSigilGeometryByArchitecture(
       const starPts1 = buildStarPolygramPoints(cx, cy, maxR * 0.78, dna.symmetryOrder, dna.starStep, 0)
       return (
         <g>
-          <polygon points={starPts1} fill="none" stroke={dna.secondaryColor} strokeOpacity="0.45" strokeWidth="0.95" />
-          <path d={outerRosePath} fill={`url(#roseFill-${dna.seed})`} stroke={dna.primaryColor} strokeOpacity="0.78" strokeWidth="1.2" />
-          <path d={innerRosePath} fill={dna.secondaryColor} fillOpacity="0.14" stroke={dna.tertiaryColor} strokeOpacity="0.8" strokeWidth="1.05" />
-          <polygon points={radarPts} fill="none" stroke={dna.foilColor} strokeOpacity="0.75" strokeWidth="1.2" />
+          <g className="sigil-orbit-ccw-slow">
+            <polygon points={starPts1} fill="none" stroke={dna.secondaryColor} strokeOpacity="0.52" strokeWidth="0.95" />
+          </g>
+          <g className="sigil-orbit-cw-slow">
+            <path d={outerRosePath} fill={`url(#roseFill-${dna.seed})`} stroke={dna.primaryColor} strokeOpacity="0.8" strokeWidth="1.2" />
+          </g>
+          <g className="sigil-orbit-ccw-med">
+            <path d={innerRosePath} fill={dna.secondaryColor} fillOpacity="0.14" stroke={dna.tertiaryColor} strokeOpacity="0.82" strokeWidth="1.05" />
+          </g>
+          <polygon points={radarPts} fill="none" stroke={dna.foilColor} strokeOpacity="0.85" strokeWidth="1.35" className="sigil-energy-flow" />
         </g>
       )
     }
@@ -1386,15 +1531,17 @@ export const ProceduralSigilCenterpiece: React.FC<{
           </radialGradient>
         </defs>
 
-        {/* Outer Fine Astrolabe Ring */}
+        {/* Counter-Rotating Outer & Inner Fine Astrolabe Rings */}
         <circle
           cx={cx}
           cy={cy}
           r={maxR + 7}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.25"
-          strokeWidth="0.75"
+          strokeOpacity="0.35"
+          strokeWidth="0.85"
+          strokeDasharray="16 6 2 6"
+          className="sigil-orbit-cw-slow"
         />
         <circle
           cx={cx}
@@ -1402,9 +1549,10 @@ export const ProceduralSigilCenterpiece: React.FC<{
           r={maxR - 8}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.42"
-          strokeWidth="0.9"
+          strokeOpacity="0.48"
+          strokeWidth="0.95"
           strokeDasharray="2 3"
+          className="sigil-orbit-ccw-slow"
         />
 
         {/* TRUE 24-HOUR CIRCADIAN RING HISTOGRAM (00:00 Top, 06:00 Right, 12:00 Bottom, 18:00 Left) */}
@@ -1418,6 +1566,8 @@ export const ProceduralSigilCenterpiece: React.FC<{
           const y1 = cy + Math.sin(angle) * rBase
           const x2 = cx + Math.cos(angle) * (rBase + barLen)
           const y2 = cy + Math.sin(angle) * (rBase + barLen)
+          const tipX = cx + Math.cos(angle) * (rBase + barLen + 2.5)
+          const tipY = cy + Math.sin(angle) * (rBase + barLen + 2.5)
 
           return (
             <g key={hr}>
@@ -1432,12 +1582,35 @@ export const ProceduralSigilCenterpiece: React.FC<{
                 strokeLinecap="round"
               />
               {isPeak && (
-                <circle
-                  cx={cx + Math.cos(angle) * (rBase + barLen + 2.5)}
-                  cy={cy + Math.sin(angle) * (rBase + barLen + 2.5)}
-                  r="2.2"
-                  fill={dna.foilColor}
-                />
+                <>
+                  <circle
+                    cx={tipX}
+                    cy={tipY}
+                    r="2.4"
+                    fill={dna.foilColor}
+                  />
+                  <circle
+                    cx={tipX}
+                    cy={tipY}
+                    r="4.5"
+                    fill="none"
+                    stroke={dna.foilColor}
+                    strokeWidth="1"
+                  >
+                    <animate
+                      attributeName="r"
+                      values="2.5;6.5;2.5"
+                      dur="2.2s"
+                      repeatCount="indefinite"
+                    />
+                    <animate
+                      attributeName="opacity"
+                      values="0.9;0.1;0.9"
+                      dur="2.2s"
+                      repeatCount="indefinite"
+                    />
+                  </circle>
+                </>
               )}
             </g>
           )
@@ -1481,7 +1654,7 @@ export const ProceduralSigilCenterpiece: React.FC<{
           secondaryAxes
         )}
 
-        {/* Prominent 66px Center Portrait Medallion Bezel Ring */}
+        {/* Prominent 66px Center Portrait Medallion Bezel Ring + Rotating Filigree */}
         <circle
           cx={cx}
           cy={cy}
@@ -1489,6 +1662,17 @@ export const ProceduralSigilCenterpiece: React.FC<{
           fill={dna.bgBase}
           stroke={dna.primaryColor}
           strokeWidth="2.2"
+        />
+        <circle
+          cx={cx}
+          cy={cy}
+          r={38.5}
+          fill="none"
+          stroke={dna.foilColor}
+          strokeOpacity="0.65"
+          strokeWidth="1.0"
+          strokeDasharray="6 4 2 4"
+          className="sigil-orbit-cw-med"
         />
         <circle
           cx={cx}
@@ -1609,30 +1793,31 @@ export const ProceduralLuxuryCardBack: React.FC<{
           points={`44,28 ${w - 44},28 ${w - 28},44 ${w - 28},${h - 44} ${w - 44},${h - 28} 44,${h - 28} 28,${h - 44} 28,44`}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.4"
-          strokeWidth="1.1"
+          strokeOpacity="0.45"
+          strokeWidth="1.15"
+          className="sigil-energy-flow"
         />
       ) : dna.frameStyle === 'alchemical-seal' ? (
         <polygon
           points={`${cx},28 ${w - 26},${cy} ${cx},${h - 28} 26,${cy}`}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.38"
-          strokeWidth="1.1"
-          strokeDasharray="5 3"
+          strokeOpacity="0.42"
+          strokeWidth="1.15"
+          className="sigil-energy-flow"
         />
       ) : (
         <path
           d={`M 28 110 A 162 145 0 0 1 ${w - 28} 110 L ${w - 28} ${h - 110} A 162 145 0 0 1 28 ${h - 110} Z`}
           fill="none"
           stroke={dna.primaryColor}
-          strokeOpacity="0.35"
-          strokeWidth="1"
-          strokeDasharray="3 3"
+          strokeOpacity="0.38"
+          strokeWidth="1.05"
+          className="sigil-energy-flow"
         />
       )}
 
-      {/* 4 Symmetrical Corner Celestial Rosettes */}
+      {/* 4 Symmetrical Spinning Corner Celestial Rosettes */}
       {[
         [44, 44],
         [w - 44, 44],
@@ -1640,13 +1825,15 @@ export const ProceduralLuxuryCardBack: React.FC<{
         [w - 44, h - 44],
       ].map(([kx, ky], idx) => (
         <g key={idx}>
-          <circle cx={kx} cy={ky} r="13" fill="none" stroke={dna.primaryColor} strokeOpacity="0.5" strokeWidth="0.9" />
-          <path d={`M ${kx - 13} ${ky} L ${kx + 13} ${ky} M ${kx} ${ky - 13} L ${kx} ${ky + 13}`} stroke={dna.primaryColor} strokeOpacity="0.4" strokeWidth="0.8" />
-          <circle cx={kx} cy={ky} r="2.5" fill={dna.primaryColor} />
+          <g className={idx % 2 === 0 ? 'sigil-rosette-spin' : 'sigil-rosette-spin-rev'}>
+            <circle cx={kx} cy={ky} r="13" fill="none" stroke={dna.primaryColor} strokeOpacity="0.55" strokeWidth="0.95" strokeDasharray="4 2" />
+            <path d={`M ${kx - 13} ${ky} L ${kx + 13} ${ky} M ${kx} ${ky - 13} L ${kx} ${ky + 13}`} stroke={dna.primaryColor} strokeOpacity="0.48" strokeWidth="0.85" />
+          </g>
+          <circle cx={kx} cy={ky} r="2.5" fill={dna.foilColor} />
         </g>
       ))}
 
-      {/* Top & Bottom Mirrored Celestial Axis Ornaments */}
+      {/* Top & Bottom Mirrored Celestial Axis Ornaments with Pulsing Halo */}
       {[82, h - 82].map((posY, idx) => {
         const dir = idx === 0 ? 1 : -1
         return (
@@ -1655,45 +1842,71 @@ export const ProceduralLuxuryCardBack: React.FC<{
             <circle cx={cx} cy={posY} r="18" fill="none" stroke={`url(#${uid}-foil)`} strokeOpacity="0.75" strokeWidth="1.2" />
             <circle cx={cx} cy={posY - dir * 5} r="14" fill={dna.bgBase} />
             <circle cx={cx} cy={posY} r="4.5" fill={dna.primaryColor} />
+            <circle cx={cx} cy={posY} r="9" fill="none" stroke={dna.foilColor} strokeWidth="0.9">
+              <animate attributeName="r" values="6;22;6" dur="3.4s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.75;0.05;0.75" dur="3.4s" repeatCount="indefinite" />
+            </circle>
           </g>
         )
       })}
 
-      {/* Central Mandala Aura */}
-      <circle cx={cx} cy={cy} r="148" fill={`url(#${uid}-centerGlow)`} />
+      {/* Breathing Central Mandala Aura */}
+      <circle cx={cx} cy={cy} r="148" fill={`url(#${uid}-centerGlow)`} className="sigil-breathe" />
 
-      {/* Outer Zodiac / Astrolabe Degree Wheel */}
-      <circle cx={cx} cy={cy} r="134" fill="none" stroke={`url(#${uid}-foil)`} strokeOpacity="0.7" strokeWidth="1.4" />
-      <circle cx={cx} cy={cy} r="126" fill="none" stroke={dna.primaryColor} strokeOpacity="0.4" strokeWidth="0.8" />
+      {/* Counter-Rotating Outer Zodiac / Astrolabe Degree Wheels */}
+      <circle
+        cx={cx}
+        cy={cy}
+        r="134"
+        fill="none"
+        stroke={`url(#${uid}-foil)`}
+        strokeOpacity="0.75"
+        strokeWidth="1.4"
+        strokeDasharray="18 4 3 4"
+        className="sigil-orbit-cw-slow"
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r="126"
+        fill="none"
+        stroke={dna.primaryColor}
+        strokeOpacity="0.48"
+        strokeWidth="0.95"
+        strokeDasharray="4 4"
+        className="sigil-orbit-ccw-slow"
+      />
 
       {/* Symmetrical 24-Spoke Circadian Harmonic Crown */}
-      {Array.from({ length: 24 }).map((_, hr) => {
-        const a = (hr / 24) * Math.PI * 2 - Math.PI / 2
-        const symVal = (rawDist[hr] + rawDist[(hr + 12) % 24]) * 0.5
-        const norm = symVal / maxVal
-        const rInner = 40
-        const rOuter = 88 + norm * 34
-        return (
-          <g key={hr}>
-            <line
-              x1={cx + Math.cos(a) * rInner}
-              y1={cy + Math.sin(a) * rInner}
-              x2={cx + Math.cos(a) * rOuter}
-              y2={cy + Math.sin(a) * rOuter}
-              stroke={dna.primaryColor}
-              strokeOpacity={0.28 + norm * 0.45}
-              strokeWidth={hr % 2 === 0 ? '1.2' : '0.75'}
-            />
-            <circle
-              cx={cx + Math.cos(a) * rOuter}
-              cy={cy + Math.sin(a) * rOuter}
-              r={1.6 + norm * 1.4}
-              fill={dna.foilColor}
-              fillOpacity="0.85"
-            />
-          </g>
-        )
-      })}
+      <g className="sigil-breathe">
+        {Array.from({ length: 24 }).map((_, hr) => {
+          const a = (hr / 24) * Math.PI * 2 - Math.PI / 2
+          const symVal = (rawDist[hr] + rawDist[(hr + 12) % 24]) * 0.5
+          const norm = symVal / maxVal
+          const rInner = 40
+          const rOuter = 88 + norm * 34
+          return (
+            <g key={hr}>
+              <line
+                x1={cx + Math.cos(a) * rInner}
+                y1={cy + Math.sin(a) * rInner}
+                x2={cx + Math.cos(a) * rOuter}
+                y2={cy + Math.sin(a) * rOuter}
+                stroke={dna.primaryColor}
+                strokeOpacity={0.28 + norm * 0.45}
+                strokeWidth={hr % 2 === 0 ? '1.2' : '0.75'}
+              />
+              <circle
+                cx={cx + Math.cos(a) * rOuter}
+                cy={cy + Math.sin(a) * rOuter}
+                r={1.6 + norm * 1.4}
+                fill={dna.foilColor}
+                fillOpacity="0.88"
+              />
+            </g>
+          )
+        })}
+      </g>
 
       {/* User-Specific Geometric Engine Scaled to 122px on Card Back */}
       {renderSigilGeometryByArchitecture(
@@ -1705,7 +1918,7 @@ export const ProceduralLuxuryCardBack: React.FC<{
         dummyAxes
       )}
 
-      {/* Central Sacred Seal Medallion */}
+      {/* Central Sacred Seal Medallion with Rotating Rune Ring */}
       <circle
         cx={cx}
         cy={cy}
@@ -1720,9 +1933,10 @@ export const ProceduralLuxuryCardBack: React.FC<{
         r="21"
         fill="none"
         stroke={dna.primaryColor}
-        strokeOpacity="0.6"
-        strokeWidth="0.8"
-        strokeDasharray="2 2"
+        strokeOpacity="0.7"
+        strokeWidth="0.95"
+        strokeDasharray="3 2"
+        className="sigil-orbit-cw-med"
       />
 
       {/* Central Archetype Code Seal */}

@@ -996,10 +996,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     }}
                   >
                     <div
-                      className="h-full rounded-full"
+                      className="h-full rounded-full spectrum-bar-animated"
                       style={{
                         width: `${row.val}%`,
-                        background: `linear-gradient(90deg, ${dna.primaryColor}, ${dna.foilColor})`,
+                        backgroundImage: `linear-gradient(90deg, ${dna.primaryColor}, ${dna.foilColor}, ${dna.secondaryColor}, ${dna.primaryColor})`,
                       }}
                     />
                   </div>

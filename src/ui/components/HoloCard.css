@@ -134,20 +134,32 @@
   pointer-events: none;
 }
 
-/* Holographic Iridescent Shimmer (pure alpha gradient, NO mix-blend-mode so 3D tree never flattens!) */
+/* Holographic Iridescent Shimmer (pure alpha gradient, NO mix-blend-mode so 3D tree never flattens!)
+   Includes ambient idle sweep so the card shimmers even when stationary */
+@keyframes holo-ambient-sweep {
+  0%, 100% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+}
+
 .holo-shimmer-aurora {
   background: linear-gradient(
     var(--ha, 115deg),
     transparent 0%,
-    rgba(255, 119, 119, 0.12) 18%,
-    rgba(255, 237, 95, 0.16) 34%,
-    rgba(168, 255, 95, 0.12) 48%,
-    rgba(131, 255, 247, 0.18) 64%,
-    rgba(120, 148, 255, 0.14) 78%,
-    rgba(216, 112, 255, 0.14) 90%,
+    rgba(255, 119, 119, 0.10) 18%,
+    rgba(255, 237, 95, 0.14) 34%,
+    rgba(168, 255, 95, 0.10) 48%,
+    rgba(131, 255, 247, 0.16) 64%,
+    rgba(120, 148, 255, 0.12) 78%,
+    rgba(216, 112, 255, 0.12) 90%,
     transparent 100%
   );
-  opacity: var(--op, 0);
+  background-size: 220% 220%;
+  animation: holo-ambient-sweep 7s ease-in-out infinite;
+  opacity: calc(0.32 + var(--op, 0) * 0.68);
   transition: opacity 0.25s ease;
   pointer-events: none;
 }
@@ -163,4 +175,115 @@
   opacity: var(--op, 0);
   transition: opacity 0.25s ease;
   pointer-events: none;
+}
+
+/* ==================== LIVING CARD FRONT & BACK SVG ANIMATIONS ==================== */
+@keyframes sigil-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sigil-spin-ccw {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes sigil-pulse-breathe {
+  0%, 100% {
+    transform: scale(0.97);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+@keyframes sigil-dash-flow {
+  from {
+    stroke-dashoffset: 48;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes sigil-beacon-ping {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.95;
+  }
+  50% {
+    transform: scale(1.55);
+    opacity: 0.35;
+  }
+}
+
+@keyframes bar-liquid-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.sigil-orbit-cw-slow {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-cw 32s linear infinite;
+}
+
+.sigil-orbit-ccw-slow {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-ccw 24s linear infinite;
+}
+
+.sigil-orbit-cw-med {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-cw 18s linear infinite;
+}
+
+.sigil-orbit-ccw-med {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-ccw 14s linear infinite;
+}
+
+.sigil-breathe {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-pulse-breathe 4.2s ease-in-out infinite;
+}
+
+.sigil-energy-flow {
+  stroke-dasharray: 8 4;
+  animation: sigil-dash-flow 3.2s linear infinite;
+}
+
+.sigil-rosette-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sigil-spin-cw 16s linear infinite;
+}
+
+.sigil-rosette-spin-rev {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sigil-spin-ccw 16s linear infinite;
+}
+
+.spectrum-bar-animated {
+  background-size: 200% 100%;
+  animation: bar-liquid-shimmer 4.5s linear infinite;
 }
