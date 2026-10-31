@@ -31,6 +31,7 @@ interface FxStatusItem {
   reposts?: number;
   replies?: number;
   quotes?: number;
+  quote?: unknown;
   lang?: string | null;
   replying_to?: {
     screen_name: string;
@@ -145,7 +146,6 @@ export class FxTwitterProvider implements DataProvider {
 
       if (res.status === 429) {
         if (allPosts.length > 30) {
-          // If we already have a reasonable sample, gracefully return
           console.warn('[FxTwitter] 429 rate limit reached during pagination; returning gathered posts.')
           break
         }
@@ -167,13 +167,16 @@ export class FxTwitterProvider implements DataProvider {
         if (seenIds.has(item.id)) continue
         seenIds.add(item.id)
 
-        const isReply = Boolean(item.replying_to)
+        const leadingMentionMatch = item.text?.trim().match(/^@([a-zA-Z0-9_]{1,15})\b/)
+        const isReply = Boolean(item.replying_to) || Boolean(leadingMentionMatch && !item.reposted_by)
         if (!opts.includeReplies && isReply) {
           continue
         }
 
         const isRetweet = Boolean(item.reposted_by)
-        const isQuote = (item.quotes || 0) > 0
+        const isQuote =
+          Boolean(item.quote) ||
+          Boolean(item.text && /https?:\/\/(?:x|twitter)\.com\/\w+\/status\/\d+/i.test(item.text))
 
         // Extract hashtags from raw_text facets or text
         const hashtags: string[] = []
@@ -214,7 +217,9 @@ export class FxTwitterProvider implements DataProvider {
           isReply,
           isRetweet,
           isQuote,
-          replyToHandle: item.replying_to?.screen_name || null,
+          replyToHandle:
+            item.replying_to?.screen_name ||
+            (leadingMentionMatch ? leadingMentionMatch[1] : null),
           likes: item.likes || 0,
           reposts: item.reposts || 0,
           replies: item.replies || 0,
