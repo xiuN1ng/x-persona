@@ -281,8 +281,10 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const [copiedLink, setCopiedLink] = useState(false)
 
   // Free 360-degree orbital rotation state
+  // `rot` is a LOW-FREQUENCY mirror (Y quantised to 6deg) used only for discrete UI
+  // (front/back label, slab specular). Per-frame transform & glare CSS variables are written
+  // straight to the DOM so dragging never re-renders the heavy card tree.
   const [rot, setRot] = useState({ x: 0, y: 0 })
-  const [glare, setGlare] = useState({ gx: 50, gy: 50, ha: 115, op: 0 })
 
   const isDraggingRef = useRef(false)
   const lastPointerRef = useRef({ x: 0, y: 0 })
@@ -290,10 +292,47 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const rotRef = useRef({ x: 0, y: 0 })
   const rafRef = useRef<number | null>(null)
 
-  // Keep rotRef synced
+  const downloadingRef = useRef(false)
+  const glareRef = useRef({ gx: 50, gy: 50, ha: 115, op: 0 })
+
+  /** Imperatively push current rotation + glare to the card element (no React render). */
+  const applyFrame = useCallback(() => {
+    const el = cardElementRef.current
+    if (!el) return
+    const { x, y } = rotRef.current
+    const g = glareRef.current
+    const off = downloadingRef.current
+    el.style.transform = off ? 'none' : `rotateX(${x.toFixed(2)}deg) rotateY(${y.toFixed(2)}deg)`
+    el.style.setProperty('--gx', `${g.gx}%`)
+    el.style.setProperty('--gy', `${g.gy}%`)
+    el.style.setProperty('--ha', `${g.ha}deg`)
+    el.style.setProperty('--op', String(g.op))
+    el.style.setProperty('--px', off ? '0' : ((g.gx - 50) / 50).toFixed(3))
+    el.style.setProperty('--py', off ? '0' : ((g.gy - 50) / 50).toFixed(3))
+  }, [])
+
+  const commitRot = useCallback(
+    (next: { x: number; y: number }) => {
+      rotRef.current = next
+      applyFrame()
+      const q = Math.round(next.y / 6) * 6
+      setRot((prev) => (prev.y === q ? prev : { x: 0, y: q }))
+    },
+    [applyFrame]
+  )
+
+  const commitGlare = useCallback(
+    (g: { gx: number; gy: number; ha: number; op: number }) => {
+      glareRef.current = g
+      applyFrame()
+    },
+    [applyFrame]
+  )
+
   useEffect(() => {
-    rotRef.current = rot
-  }, [rot])
+    downloadingRef.current = downloading
+    applyFrame()
+  }, [downloading, applyFrame, profile, persona])
 
   // Clean up animation frame
   useEffect(() => {
@@ -316,7 +355,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       const gx = Math.max(0, Math.min(100, Math.round(50 + gamma * 1.1)))
       const gy = Math.max(0, Math.min(100, Math.round(50 + (beta - 45) * 1.1)))
       const ha = Math.round((gamma * 2 + beta + 360) % 360)
-      setGlare({ gx, gy, ha, op: 0.72 })
+      commitGlare({ gx, gy, ha, op: 0.72 })
     }
     window.addEventListener('deviceorientation', handleOrientation, true)
     return () => window.removeEventListener('deviceorientation', handleOrientation, true)
@@ -336,21 +375,19 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       ) {
         const nextY = rotRef.current.y + velocityRef.current.vx
         const nextX = Math.max(-55, Math.min(55, rotRef.current.x + velocityRef.current.vy))
-        rotRef.current = { x: nextX, y: nextY }
-        setRot({ x: nextX, y: nextY })
+        commitRot({ x: nextX, y: nextY })
         rafRef.current = requestAnimationFrame(step)
       } else {
         // Gently settle X tilt toward 0 while preserving Y inspect angle
         if (Math.abs(rotRef.current.x) > 0.5) {
           const nextX = rotRef.current.x * 0.9
-          rotRef.current = { x: nextX, y: rotRef.current.y }
-          setRot({ x: nextX, y: rotRef.current.y })
+          commitRot({ x: nextX, y: rotRef.current.y })
           rafRef.current = requestAnimationFrame(step)
         }
       }
     }
     rafRef.current = requestAnimationFrame(step)
-  }, [])
+  }, [commitRot])
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -385,9 +422,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
         const nextY = rotRef.current.y + deltaY
         const nextX = Math.max(-60, Math.min(60, rotRef.current.x + deltaX))
-        rotRef.current = { x: nextX, y: nextY }
-        setRot({ x: nextX, y: nextY })
-        setGlare({
+        commitRot({ x: nextX, y: nextY })
+        commitGlare({
           gx,
           gy,
           ha: Math.round(nextY * 2 + 115) % 360,
@@ -396,7 +432,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       } else {
         // Subtle hover light response without overriding user's parked Y rotation
         const angle = Math.atan2(localY - rect.height / 2, localX - rect.width / 2) * (180 / Math.PI) + 180
-        setGlare({
+        commitGlare({
           gx,
           gy,
           ha: Math.round(angle),
@@ -404,7 +440,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
         })
       }
     },
-    [interactive, downloading]
+    [interactive, downloading, commitRot, commitGlare]
   )
 
   const handlePointerUp = useCallback(
@@ -426,9 +462,9 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
   const handlePointerLeave = useCallback(() => {
     if (!interactive) return
     if (!isDraggingRef.current) {
-      setGlare((prev) => ({ ...prev, op: 0 }))
+      commitGlare({ ...glareRef.current, op: 0 })
     }
-  }, [interactive])
+  }, [interactive, commitGlare])
 
   // Double click smoothly snaps between Front (0 deg) and Back (180 deg)
   const handleDoubleClick = useCallback(() => {
@@ -437,9 +473,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     const normY = ((rotRef.current.y % 360) + 360) % 360
     const isCurrentlyBack = normY > 90 && normY < 270
     const targetY = isCurrentlyBack ? 0 : 180
-    rotRef.current = { x: 0, y: targetY }
-    setRot({ x: 0, y: targetY })
-  }, [interactive])
+    commitRot({ x: 0, y: targetY })
+  }, [interactive, commitRot])
 
   if (!profile || !persona) return null
 
@@ -544,8 +579,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
     if (!cardElementRef.current) throw new Error('Card element not mounted')
     setDownloading(true)
     setCaptureSide(side)
-    setRot({ x: 0, y: side === 'back' ? 180 : 0 })
-    setGlare((prev) => ({ ...prev, op: 0 }))
+    commitRot({ x: 0, y: side === 'back' ? 180 : 0 })
+    commitGlare({ ...glareRef.current, op: 0 })
     await new Promise((r) => setTimeout(r, 120))
     return toPng(cardElementRef.current, {
       cacheBust: true,
@@ -585,7 +620,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       // 4. Restore 3D view before opening share sheet / X window
       setCaptureSide('none')
       setDownloading(false)
-      setRot(savedRot)
+      commitRot(savedRot)
 
       if (openXIntentAfter) {
         const file = new File([blob], filename, { type: 'image/png' })
@@ -613,7 +648,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       console.error('Failed to export card showcase image', err)
       setCaptureSide('none')
       setDownloading(false)
-      setRot(savedRot)
+      commitRot(savedRot)
       alert('卡牌海报生成失败，可直接截屏保存')
     }
   }
@@ -651,7 +686,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
           const rad = (angleDeg * Math.PI) / 180
           const nextRot = { x: Math.sin(rad) * 7, y: angleDeg }
           rotRef.current = nextRot
-          setRot(nextRot)
+          commitRot(nextRot)
         }
       )
 
@@ -664,7 +699,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
       setRecordingVideo(false)
       setVideoProgress(0)
-      setRot(savedRot)
+      commitRot(savedRot)
 
       const videoFile = new File([blob], filename, { type: mimeType })
       const sharedNatively = await tryNativeFileShare(
@@ -685,7 +720,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       setDownloading(false)
       setRecordingVideo(false)
       setVideoProgress(0)
-      setRot(savedRot)
+      commitRot(savedRot)
       alert('当前浏览器环境暂不支持视频录制，请使用海报图晒卡')
     }
   }
@@ -784,16 +819,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               ref={cardElementRef}
               style={
                 {
-                  transform: downloading
-                    ? 'none'
-                    : `rotateX(${rot.x.toFixed(2)}deg) rotateY(${rot.y.toFixed(2)}deg)`,
-                  '--gx': `${glare.gx}%`,
-                  '--gy': `${glare.gy}%`,
-                  '--ha': `${glare.ha}deg`,
-                  '--op': glare.op,
                   '--card-glow': dna.borderColor,
-                  '--px': downloading ? 0 : ((glare.gx - 50) / 50).toFixed(3),
-                  '--py': downloading ? 0 : ((glare.gy - 50) / 50).toFixed(3),
                 } as React.CSSProperties
               }
               className="card-3d-root relative w-[380px] h-[575px] rounded-[30px]"
