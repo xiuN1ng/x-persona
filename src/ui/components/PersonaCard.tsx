@@ -46,17 +46,17 @@ import { XIcon } from './XIcon'
 import './HoloCard.css'
 
 /**
- * Physical card edge: a machined-metal slab 20px thick.
- * - 21 hollow rounded rings give the curved corners their true extruded wall.
- * - 4 flat spines cover the straight sides.
- * Both share ONE thickness profile (dark outer bevel > bright chamfer > satin body > centre parting line)
- * so rings and spines blend into a single continuous, clean metal edge (no text, no noise).
+ * Physical card edge, built the classic robust way: a stack of FILLED rounded-rect slices
+ * spaced <1px apart along Z. Seen edge-on they merge into one solid 20px wall, corners are
+ * naturally rounded, and every slice is a parallel plane at a distinct depth, so there are no
+ * crossing planes (no z-fighting, no kinks, no seams).
+ * Colour follows one thickness profile: primary bevel > bright chamfer > satin body > parting line.
  */
 const CardSlabThickness: React.FC<{
   dna: GenerativeDNA;
   rotY: number;
   activeCode: string;
-}> = ({ dna, rotY }) => {
+}> = ({ dna }) => {
   const sliceCount = 21
   const HI = '#eef2f8'
   const GROOVE = '#0a0f1c'
@@ -64,71 +64,26 @@ const CardSlabThickness: React.FC<{
   const colorAt = (z: number) => {
     const a = Math.abs(z)
     if (a <= 1.0) return GROOVE
-    if (a >= 8.4) return dna.primaryColor
-    if (a >= 6.6) return HI
+    if (a >= 8.3) return dna.primaryColor
+    if (a >= 6.4) return HI
     return dna.secondaryColor
   }
 
-  const slices = Array.from({ length: sliceCount }, (_, i) => {
-    const z = -9.2 + (i / (sliceCount - 1)) * 18.4
-    return { z, color: colorAt(z) }
-  })
-
-  // One thickness profile, expressed in % of the 20px edge (0% = back face, 100% = front face)
-  const profile = (dir: string) => `linear-gradient(${dir},
-    ${dna.primaryColor} 0%,
-    ${dna.primaryColor} 6%,
-    ${HI} 14%,
-    ${dna.secondaryColor} 26%,
-    ${dna.secondaryColor} 45%,
-    ${GROOVE} 49%,
-    ${GROOVE} 51%,
-    ${dna.secondaryColor} 55%,
-    ${dna.secondaryColor} 74%,
-    ${HI} 86%,
-    ${dna.primaryColor} 94%,
-    ${dna.primaryColor} 100%)`
-
-  // Soft specular sheen that slides along the edge as the card turns
-  const specShift = Math.round(((Math.sin((rotY * Math.PI) / 180) + 1) / 2) * 100)
-  const sheen = `linear-gradient(90deg,
-    rgba(255,255,255,0) ${Math.max(specShift - 22, 0)}%,
-    rgba(255,255,255,0.38) ${specShift}%,
-    rgba(255,255,255,0) ${Math.min(specShift + 22, 100)}%)`
-  const sheenV = sheen.replace('90deg', '180deg')
-
   return (
     <>
-      {slices.map((s, idx) => (
-        <div
-          key={idx}
-          className="card-slab-slice"
-          style={{
-            transform: `translateZ(${s.z.toFixed(2)}px)`,
-            border: `5px solid ${s.color}`,
-          }}
-        />
-      ))}
-
-      {/* Left / right spines (thickness runs across their 20px width) */}
-      <div
-        className="card-spine-right"
-        style={{ background: `${sheenV}, ${profile('90deg')}` }}
-      />
-      <div
-        className="card-spine-left"
-        style={{ background: `${sheenV}, ${profile('90deg')}` }}
-      />
-
-      {/* Top / bottom spines (thickness runs across their 20px height) */}
-      <div
-        className="card-spine-top"
-        style={{ background: `${sheen}, ${profile('180deg')}` }}
-      />
-      <div
-        className="card-spine-bottom"
-        style={{ background: `${sheen}, ${profile('180deg')}` }}
-      />
+      {Array.from({ length: sliceCount }, (_, i) => {
+        const z = -9.2 + (i / (sliceCount - 1)) * 18.4
+        return (
+          <div
+            key={i}
+            className="card-slab-slice"
+            style={{
+              transform: `translateZ(${z.toFixed(2)}px)`,
+              backgroundColor: colorAt(z),
+            }}
+          />
+        )
+      })}
     </>
   )
 }

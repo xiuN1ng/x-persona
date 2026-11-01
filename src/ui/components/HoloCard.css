@@ -94,9 +94,6 @@
   background: transparent;
   pointer-events: none;
   backface-visibility: visible;
-  /* Rings only build the 4 rounded corners. Straight edges are the flat spines, so the two
-     never overlap in the same plane (overlap caused the zebra z-fighting at edge-on angles). */
-  clip-path: path('M0 0H30V30H0Z M350 0H380V30H350Z M0 545H30V575H0Z M350 545H380V575H350Z');
 }
 
 .card-spine-right {
