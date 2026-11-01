@@ -791,6 +791,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                   '--ha': `${glare.ha}deg`,
                   '--op': glare.op,
                   '--card-glow': dna.borderColor,
+                  '--px': downloading ? 0 : ((glare.gx - 50) / 50).toFixed(3),
+                  '--py': downloading ? 0 : ((glare.gy - 50) / 50).toFixed(3),
                 } as React.CSSProperties
               }
               className="card-3d-root relative w-[380px] h-[575px] rounded-[30px]"
@@ -821,6 +823,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
             {/* Specular Glare & Iridescent Shimmer inside 2D face */}
             <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
+            <div className="card-noise-grain absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
+            <div className="card-specular-rim absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
             <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
 
             {/* MINIMALIST EDITORIAL TOP BAR */}
@@ -1061,6 +1065,8 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
 
             {/* Specular Glare & Iridescent Shimmer inside 2D back face */}
             <div className="card-glare absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
+            <div className="card-noise-grain absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
+            <div className="card-specular-rim absolute inset-0 rounded-[30px] z-30 pointer-events-none" />
             <div className="holo-shimmer-aurora absolute inset-0 rounded-[30px] z-20 pointer-events-none" />
           </div>
         </div>
