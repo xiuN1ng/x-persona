@@ -29,6 +29,7 @@ import {
   tryNativeFileShare
 } from '../../share/card-media-exporter'
 import { INNER_ARCHETYPES } from '../../persona/inner-archetypes'
+import { computePersonaConfidence } from '../../persona/confidence'
 import {
   computeGenerativeDNA,
   ProceduralPatternCanvas,
@@ -1077,6 +1078,25 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
       {/* 360 DRAG TELEMETRY & EXPORT CONTROLS */}
       {interactive && (
         <div className="w-full max-w-[380px] mt-1.5 sm:mt-3 space-y-1.5 sm:space-y-2.5 px-1 sm:px-0">
+          {/* Honest confidence hint (local-only, derived from sample size & axis margins) */}
+          {slot === 'outer' && features && persona && (() => {
+            const conf = computePersonaConfidence(features, persona.axes)
+            const tone =
+              conf.level === 'high'
+                ? 'text-emerald-300 border-emerald-500/30'
+                : conf.level === 'medium'
+                ? 'text-amber-300 border-amber-500/30'
+                : 'text-rose-300 border-rose-500/30'
+            return (
+              <div
+                className={`px-2.5 py-1 rounded-lg bg-slate-900/70 border text-[10px] sm:text-[11px] leading-snug ${tone}`}
+                data-testid="persona-confidence"
+              >
+                <span className="font-bold mr-1.5">{conf.labelZh}</span>
+                <span className="text-slate-400">{conf.messageZh}</span>
+              </div>
+            )
+          })()}
           {/* Interactive Drag Telemetry Bar */}
           <div className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-slate-400 font-mono">
             <span className="flex items-center gap-1 sm:gap-1.5 text-purple-300 truncate">
