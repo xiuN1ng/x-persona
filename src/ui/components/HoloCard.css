@@ -8,7 +8,7 @@
    ============================================================================ */
 
 .card-perspective-container {
-  perspective: 1300px;
+  perspective: 2200px;
   touch-action: none;
 }
 
@@ -94,12 +94,15 @@
   background: transparent;
   pointer-events: none;
   backface-visibility: visible;
+  /* Rings only build the 4 rounded corners. Straight edges are the flat spines, so the two
+     never overlap in the same plane (overlap caused the zebra z-fighting at edge-on angles). */
+  clip-path: path('M0 0H30V30H0Z M350 0H380V30H350Z M0 545H30V575H0Z M350 545H380V575H350Z');
 }
 
 .card-spine-right {
   position: absolute;
-  top: 22px;
-  bottom: 22px;
+  top: 30px;
+  bottom: 30px;
   right: -10px;
   width: 20px;
   transform: rotateY(90deg);
@@ -110,8 +113,8 @@
 
 .card-spine-left {
   position: absolute;
-  top: 22px;
-  bottom: 22px;
+  top: 30px;
+  bottom: 30px;
   left: -10px;
   width: 20px;
   transform: rotateY(-90deg);
@@ -122,8 +125,8 @@
 
 .card-spine-top {
   position: absolute;
-  left: 22px;
-  right: 22px;
+  left: 30px;
+  right: 30px;
   top: -10px;
   height: 20px;
   transform: rotateX(90deg);
@@ -134,8 +137,8 @@
 
 .card-spine-bottom {
   position: absolute;
-  left: 22px;
-  right: 22px;
+  left: 30px;
+  right: 30px;
   bottom: -10px;
   height: 20px;
   transform: rotateX(-90deg);
