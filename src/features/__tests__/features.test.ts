@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest'
-import { computeFeatureVector } from '../index'
+import { describe, it, expect, beforeAll } from 'vitest'
+import { computeFeatureVector, preloadSegmenter } from '../index'
 import type { Post } from '../../providers/types'
 import { computeAxisScores, determineArchetype } from '../../persona/axes'
 
 describe('Feature Engineering & Persona Inference', () => {
+  beforeAll(async () => {
+    await preloadSegmenter()
+  })
+
   const mockPosts: Post[] = [
     {
       id: '1',

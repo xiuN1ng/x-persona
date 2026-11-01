@@ -4,7 +4,7 @@ import { FxTwitterProvider } from '../providers/fxtwitter'
 import { resolveAvatarAndExtractFeatures, computeDeterministicAvatarFallback, generateProceduralAvatarDataUrl } from '../providers/avatar'
 import { getCachedUserData, setCachedUserData } from '../providers/cache'
 import type { FeatureVector } from '../features/types'
-import { computeFeatureVector } from '../features'
+import { computeFeatureVector, preloadSegmenter } from '../features'
 import { computeAxisScores, determineArchetype, type PersonaResult } from '../persona/axes'
 import type { PersonaLlmOutput } from '../llm/schema'
 import { scoreOejts, comparePersonas, type OejtsScores, type ComparisonResult } from '../oejts/scoring'
@@ -150,7 +150,8 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
             await setCachedUserData(cleanHandle, resolvedProfile, cached.posts)
           }
 
-          const features = computeFeatureVector(cached.posts)
+          await preloadSegmenter()
+    const features = computeFeatureVector(cached.posts)
           const axes = computeAxisScores(features)
           const persona = determineArchetype(axes, features)
           set({
@@ -216,7 +217,8 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
 
       set({ progress: { current: 90, total: 100, message: '正在融合头像色彩权重，锻造【表世界·赛博人格卡】...' } })
 
-      const features = computeFeatureVector(posts)
+      await preloadSegmenter()
+    const features = computeFeatureVector(posts)
       const axes = computeAxisScores(features)
       const persona = determineArchetype(axes, features)
       const prefilledAnswers = computePrefillAnswers(axes, features)
@@ -244,7 +246,7 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
     }
   },
 
-  importArchivePosts: (posts: Post[], mockHandle = 'archive_user') => {
+  importArchivePosts: async (posts: Post[], mockHandle = 'archive_user') => {
     if (posts.length === 0) return
     const fallbackAvatarFeatures = computeDeterministicAvatarFallback(mockHandle)
     const profile: Profile = {
@@ -260,6 +262,7 @@ export const usePersonaStore = create<PersonaStoreState>((set, get) => ({
       verified: false,
     }
 
+    await preloadSegmenter()
     const features = computeFeatureVector(posts)
     const axes = computeAxisScores(features)
     const persona = determineArchetype(axes)

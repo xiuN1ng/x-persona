@@ -8,7 +8,7 @@ import { usePersonaStore } from './store/usePersonaStore'
 import { Sparkles, ClipboardList, Layers } from 'lucide-react'
 
 export function App() {
-  const { persona, activeTab, setActiveTab, initFromUrlHash, oejtsScores, isFused } = usePersonaStore()
+  const { persona, activeTab, setActiveTab, initFromUrlHash, oejtsScores, isFused, isSharedView, reset } = usePersonaStore()
 
   useEffect(() => {
     initFromUrlHash()
@@ -25,6 +25,15 @@ export function App() {
           <HandleInput />
         ) : (
           <div className="w-full flex flex-col items-center">
+            {/* Shared-link landing CTA: turn every viewer into a potential new tester */}
+            {isSharedView && (
+              <button
+                onClick={reset}
+                className="mb-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 text-white text-xs font-bold shadow-lg shadow-purple-600/25 cursor-pointer"
+              >
+                这是别人的卡 · 测测我自己 →
+              </button>
+            )}
             {/* View Switcher Pill */}
             <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-3 py-0.5 px-1">
               <button
@@ -80,6 +89,7 @@ export function App() {
       >
         <div className="max-w-4xl mx-auto px-4">
           <p>X Persona · 程序化双界人格卡牌与炼成系统 · 娱乐与自我洞察用途</p>
+          <p className="mt-1">零埋点 · 零上传 · 无账号：所有分析均在你的浏览器本地完成，仅读取公开推文，不会存储或收集任何人的数据。称号为统计娱乐结果，不构成对任何人的评价。</p>
         </div>
       </footer>
     </div>

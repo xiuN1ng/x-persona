@@ -1,13 +1,29 @@
-import { Segment, useDefault } from 'segmentit'
 import type { Post } from '../providers/types'
 import type { KeywordItem, HashtagItem } from './types'
 
-let segmenterInstance: ReturnType<typeof useDefault> | null = null
+type Segmenter = { doSegment: (text: string) => Array<{ w?: string }> }
+let segmenterInstance: Segmenter | null = null
+let segmenterLoading: Promise<void> | null = null
 
-function getSegmenter() {
-  if (!segmenterInstance) {
-    segmenterInstance = useDefault(new Segment())
+/**
+ * Lazily loads the heavy Chinese dictionary (segmentit) as a separate chunk.
+ * Until it resolves, topic extraction degrades gracefully to a Latin-token fallback.
+ */
+export function preloadSegmenter(): Promise<void> {
+  if (segmenterInstance) return Promise.resolve()
+  if (!segmenterLoading) {
+    segmenterLoading = import('segmentit')
+      .then(({ Segment, useDefault }) => {
+        segmenterInstance = useDefault(new Segment()) as unknown as Segmenter
+      })
+      .catch(() => {
+        segmenterLoading = null
+      })
   }
+  return segmenterLoading
+}
+
+function getSegmenter(): Segmenter | null {
   return segmenterInstance
 }
 
@@ -60,6 +76,7 @@ export function extractTopicFeatures(posts: Post[]): TopicFeatures {
 
     // Run segmentit
     try {
+      if (!segmenter) throw new Error('segmenter not loaded')
       const segments = segmenter.doSegment(text)
       for (const item of segments) {
         const word = (item.w || '').trim().toLowerCase()
