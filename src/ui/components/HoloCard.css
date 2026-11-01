@@ -1,4 +1,11 @@
-/* 3D Free-Orbit Holographic Slab Rendering Engine (20px True Physical Thickness) */
+/* ============================================================================
+   X-PERSONA HAUTE COLLECTIBLE RENDERING ENGINE
+   Combines:
+   1. 20px True Physical 3D Extruded Metallic Slab (Chromium preserve-3d safe)
+   2. simeydotme/pokemon-cards-css Color-Dodge Diffraction Foil & Spotlight Glare
+   3. nolimits4web/atropos Multi-Layer Internal Depth Parallax
+   4. Vercel/Linear Specular Chamfered Rim & Film Noise Grain
+   ============================================================================ */
 
 .card-perspective-container {
   perspective: 1300px;
@@ -12,13 +19,18 @@
   -webkit-transform-style: preserve-3d;
 }
 
-/* Front and Back faces sit at +10px and -10px (total 20px slab thickness) */
+/* Front and Back faces sit at +10px and -10px (total 20px slab thickness).
+   `isolation: isolate` traps all blend-modes (color-dodge, overlay, soft-light)
+   inside the 2D face so they never flatten the parent .card-3d-root! */
 .card-face-front,
 .card-face-back {
   transform-style: flat;
+  isolation: isolate;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  box-shadow: 0 28px 60px -15px rgba(0, 0, 0, 0.78);
+  box-shadow:
+    0 32px 68px -16px rgba(0, 0, 0, 0.85),
+    0 0 1px 1px rgba(255, 255, 255, 0.08) inset;
 }
 
 .card-face-front {
@@ -29,8 +41,52 @@
   transform: rotateY(180deg) translateZ(10px);
 }
 
-/* Hollow 3D Extruded Rim Ring Slice:
-   Creates solid 20px thickness around the 30px rounded corners & edges while leaving center 100% open */
+/* ============================================================================
+   ATROPOS-STYLE 3-LAYER INTERNAL DEPTH PARALLAX
+   Uses --px and --py (-1 to +1) driven by pointer / tilt angle
+   ============================================================================ */
+.parallax-layer-bg {
+  transform: translate3d(
+    calc(var(--px, 0) * -9px),
+    calc(var(--py, 0) * -9px),
+    0
+  ) scale(1.04);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.parallax-layer-mid {
+  transform: translate3d(
+    calc(var(--px, 0) * 5px),
+    calc(var(--py, 0) * 5px),
+    0
+  );
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.parallax-layer-fg {
+  transform: translate3d(
+    calc(var(--px, 0) * 11px),
+    calc(var(--py, 0) * 11px),
+    0
+  );
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.parallax-layer-ui {
+  transform: translate3d(
+    calc(var(--px, 0) * 3px),
+    calc(var(--py, 0) * 3px),
+    0
+  );
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ============================================================================
+   20px PHYSICAL 3D EXTRUDED METALLIC SLAB CORE
+   ============================================================================ */
 .card-slab-slice {
   position: absolute;
   inset: 0;
@@ -40,7 +96,6 @@
   backface-visibility: visible;
 }
 
-/* Perpendicular 20px Solid Metallic Spine Walls (visible dead-on at 90° and 270°) */
 .card-spine-right {
   position: absolute;
   top: 22px;
@@ -86,10 +141,8 @@
   transform: rotateX(-90deg);
   transform-origin: center center;
   pointer-events: none;
-  backface-visibility: visible;
 }
 
-/* 4 Rounded Corner Bevel Bridge Plates so 90°/270° view has full 20px thickness at the rounded tips too */
 .card-corner-tr {
   position: absolute;
   top: 2px;
@@ -134,33 +187,190 @@
   pointer-events: none;
 }
 
-/* Holographic Iridescent Shimmer (pure alpha gradient, NO mix-blend-mode so 3D tree never flattens!) */
+/* ============================================================================
+   SIMEYDOTME / POKEMON-CARDS-CSS INSPIRED COLOR-DODGE DIFFRACTION FOIL
+   Uses micro-guilloche grating + spectral sunpillars + radial mask
+   ============================================================================ */
+@keyframes holo-ambient-drift {
+  0%, 100% {
+    background-position: 0% 50%, 50% 50%, 0% 0%;
+  }
+  50% {
+    background-position: 100% 50%, 50% 50%, 100% 100%;
+  }
+}
+
 .holo-shimmer-aurora {
-  background: linear-gradient(
-    var(--ha, 115deg),
-    transparent 0%,
-    rgba(255, 119, 119, 0.12) 18%,
-    rgba(255, 237, 95, 0.16) 34%,
-    rgba(168, 255, 95, 0.12) 48%,
-    rgba(131, 255, 247, 0.18) 64%,
-    rgba(120, 148, 255, 0.14) 78%,
-    rgba(216, 112, 255, 0.14) 90%,
-    transparent 100%
-  );
-  opacity: var(--op, 0);
+  background-image:
+    /* Layer 1: Fine metallic micro-diffraction grating */
+    repeating-linear-gradient(
+      calc(var(--ha, 115deg) + 25deg),
+      rgba(255, 255, 255, 0.0) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      rgba(255, 255, 255, 0.0) 2px,
+      rgba(0, 0, 0, 0.04) 3px,
+      rgba(255, 255, 255, 0.0) 5px
+    ),
+    /* Layer 2: Radial spotlight window following cursor/gyro */
+    radial-gradient(
+      farthest-corner circle at var(--gx, 50%) var(--gy, 35%),
+      rgba(255, 255, 255, 0.55) 0%,
+      rgba(255, 255, 255, 0.16) 36%,
+      rgba(0, 0, 0, 0.35) 90%
+    ),
+    /* Layer 3: Spectral iridescent sunpillars */
+    linear-gradient(
+      var(--ha, 115deg),
+      transparent 8%,
+      hsla(2, 92%, 68%, 0.32) 22%,
+      hsla(48, 96%, 68%, 0.36) 36%,
+      hsla(152, 88%, 64%, 0.32) 50%,
+      hsla(196, 96%, 68%, 0.38) 64%,
+      hsla(258, 92%, 72%, 0.34) 78%,
+      hsla(316, 90%, 68%, 0.30) 90%,
+      transparent 98%
+    );
+  background-size: 100% 100%, 180% 180%, 240% 240%;
+  background-blend-mode: overlay, soft-light, normal;
+  mix-blend-mode: color-dodge;
+  animation: holo-ambient-drift 9s ease-in-out infinite;
+  opacity: calc(0.22 + var(--op, 0) * 0.62);
   transition: opacity 0.25s ease;
   pointer-events: none;
 }
 
-/* Dynamic Specular Glare Spot (pure alpha gradient, NO mix-blend-mode) */
+/* Museum Sapphire Glass Specular Glare (mix-blend-mode: soft-light / overlay) */
 .card-glare {
-  background: radial-gradient(
-    circle at var(--gx, 50%) var(--gy, 50%),
-    rgba(255, 255, 255, 0.28) 0%,
-    rgba(255, 255, 255, 0.08) 28%,
-    transparent 60%
-  );
-  opacity: var(--op, 0);
-  transition: opacity 0.25s ease;
+  background:
+    radial-gradient(
+      farthest-corner circle at var(--gx, 50%) var(--gy, 30%),
+      rgba(255, 255, 255, 0.48) 0%,
+      rgba(255, 255, 255, 0.16) 24%,
+      rgba(255, 255, 255, 0.02) 52%,
+      transparent 75%
+    );
+  mix-blend-mode: overlay;
+  opacity: calc(0.18 + var(--op, 0) * 0.72);
+  transition: opacity 0.22s ease;
   pointer-events: none;
+}
+
+/* Tactile Matte Paper / Anodized Metal Micro-Noise Grain (Inline SVG Data-URI) */
+.card-noise-grain {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.9'/%3E%3C/svg%3E");
+  background-size: 150px 150px;
+  mix-blend-mode: overlay;
+  opacity: 0.055;
+  pointer-events: none;
+}
+
+/* Linear / Vercel Style 1px Directional Specular Bevel Rim */
+.card-specular-rim {
+  border-radius: 28px;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.32),
+    inset 0 -1px 0 0 rgba(255, 255, 255, 0.08),
+    inset 1px 0 0 0 rgba(255, 255, 255, 0.14),
+    inset -1px 0 0 0 rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+}
+
+/* ==================== HAUTE HORLOGERIE SVG MOTION ==================== */
+@keyframes sigil-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sigil-spin-ccw {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes sigil-pulse-breathe {
+  0%, 100% {
+    transform: scale(0.985);
+    opacity: 0.78;
+  }
+  50% {
+    transform: scale(1.025);
+    opacity: 1;
+  }
+}
+
+@keyframes sigil-dash-flow {
+  from {
+    stroke-dashoffset: 64;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes bar-liquid-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.sigil-orbit-cw-slow {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-cw 42s linear infinite;
+}
+
+.sigil-orbit-ccw-slow {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-ccw 32s linear infinite;
+}
+
+.sigil-orbit-cw-med {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-cw 22s linear infinite;
+}
+
+.sigil-orbit-ccw-med {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-spin-ccw 18s linear infinite;
+}
+
+.sigil-breathe {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: sigil-pulse-breathe 5s ease-in-out infinite;
+}
+
+.sigil-energy-flow {
+  stroke-dasharray: 10 5;
+  animation: sigil-dash-flow 4s linear infinite;
+}
+
+.sigil-rosette-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sigil-spin-cw 24s linear infinite;
+}
+
+.sigil-rosette-spin-rev {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sigil-spin-ccw 24s linear infinite;
+}
+
+.spectrum-bar-animated {
+  background-size: 200% 100%;
+  animation: bar-liquid-shimmer 5s linear infinite;
 }
