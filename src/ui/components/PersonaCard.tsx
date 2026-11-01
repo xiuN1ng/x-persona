@@ -859,67 +859,59 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                 hourlyDistribution={features?.hourlyDistribution}
               />
 
-              {/* EDITORIAL TITLE & USER IDENTITY */}
-              <div className="mt-1.5 text-center w-full">
-                <h2 className="text-[20px] font-black tracking-wider leading-tight truncate px-1">
-                  {slot === 'outer'
-                    ? persona.displayTitleZh || outerArch.nameZh
-                    : slot === 'inner'
-                    ? innerArch.nameZh
-                    : fusionPersona?.titleZh}
-                </h2>
-                <div
-                  className="text-[9px] font-mono uppercase tracking-[0.16em] mt-0.5 font-medium truncate px-2"
-                  style={{ color: dna.primaryColor }}
-                >
-                  {slot === 'outer'
-                    ? `${persona.modifierEn} · ${outerArch.nameEn}`
-                    : slot === 'inner'
-                    ? `${innerArch.nameEn} · ${innerArch.arcanaZh}`
-                    : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
+              {/* EDITORIAL TITLE, RARITY STAMP & IDENTITY STRIP */}
+              <div className="mt-1.5 w-full px-1">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 text-left">
+                    <div
+                      className="text-[9px] font-mono uppercase tracking-[0.16em] font-medium truncate"
+                      style={{ color: dna.primaryColor }}
+                    >
+                      {slot === 'outer'
+                        ? `${persona.modifierEn} · ${outerArch.nameEn}`
+                        : slot === 'inner'
+                        ? `${innerArch.nameEn} · ${innerArch.arcanaZh}`
+                        : `${fusionPersona?.titleEn} · ${fusionPersona?.rarity}`}
+                    </div>
+                    <h2 className="text-[21px] font-black tracking-tight leading-tight truncate">
+                      {slot === 'outer'
+                        ? persona.displayTitleZh || outerArch.nameZh
+                        : slot === 'inner'
+                        ? innerArch.nameZh
+                        : fusionPersona?.titleZh}
+                    </h2>
+                  </div>
+                  <span
+                    className="shrink-0 mt-1 px-1.5 py-0.5 text-[8.5px] font-mono font-bold tracking-[0.14em] rounded-sm"
+                    style={{
+                      border: `1px solid ${dna.primaryColor}`,
+                      color: dna.primaryColor,
+                    }}
+                  >
+                    {dna.rarityLabel}
+                  </span>
                 </div>
                 <div
-                  className="text-[11px] font-mono mt-0.5 truncate px-2"
+                  className="mt-1 flex items-center gap-1.5 text-[10px] font-mono overflow-hidden"
                   style={{ color: dna.mutedTextColor }}
                 >
-                  {profile.name} <span className="opacity-75">@{profile.screenName}</span>
-                </div>
-
-                {/* PERSONAL LEXICAL & CIRCADIAN FINGERPRINT PILLS */}
-                <div className="flex items-center justify-center flex-wrap gap-1 mt-1.5 px-1">
-                  {personalTags.map((tag, i) => (
-                    <span
-                      key={i}
-                      className="px-1.5 py-0.5 rounded-md text-[9px] font-mono tracking-wider"
-                      style={{
-                        backgroundColor: dna.surfaceBg,
-                        border: `1px solid ${dna.primaryColor}45`,
-                        color: dna.primaryColor,
-                      }}
-                    >
+                  <span className="truncate">@{profile.screenName}</span>
+                  {personalTags.slice(0, 2).map((tag, i) => (
+                    <span key={i} className="shrink-0" style={{ color: dna.primaryColor }}>
                       {tag}
                     </span>
                   ))}
-                  <span
-                    className="px-1.5 py-0.5 rounded-md text-[9px] font-mono tracking-wider"
-                    style={{
-                      backgroundColor: dna.surfaceBg,
-                      border: `1px solid ${panelBorder}`,
-                      color: dna.mutedTextColor,
-                    }}
-                  >
-                    {peakHourLabel}
-                  </span>
+                  <span className="shrink-0 ml-auto opacity-80">{peakHourLabel}</span>
                 </div>
               </div>
             </div>
 
-            {/* POETIC ESSENCE / PERSONAL REPRESENTATIVE VOICE / AWAKENED PASSIVE */}
+            {/* VOICE SPECIMEN: left-accented editorial quote */}
             <div
-              className="relative z-10 px-3 py-2 rounded-xl text-center"
+              className="relative z-10 pl-3 pr-2 py-1.5 rounded-r-lg text-left"
               style={{
                 backgroundColor: dna.surfaceBg,
-                border: `1px solid ${panelBorder}`,
+                borderLeft: `2.5px solid ${dna.primaryColor}`,
               }}
             >
               {slot === 'fusion' && fusionPersona ? (
@@ -986,7 +978,7 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
               ].map((row, idx) => (
                 <div key={idx} className="flex items-center justify-between gap-2">
                   <span
-                    className="w-12 text-left"
+                    className="w-11 text-left"
                     style={{
                       fontWeight: row.val < 50 ? 700 : 400,
                       color: row.val < 50 ? dna.textColor : dna.mutedTextColor,
@@ -995,40 +987,40 @@ export const SingleProceduralCard: React.FC<SingleCardRendererProps> = ({
                     {row.left}
                   </span>
                   <div
-                    className="flex-1 h-1 rounded-full overflow-hidden"
+                    className="relative flex-1 h-px"
                     style={{
-                      backgroundColor: isLight ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.1)',
+                      backgroundColor: isLight ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.2)',
                     }}
                   >
                     <div
-                      className="h-full rounded-full spectrum-bar-animated"
+                      className="absolute left-1/2 -top-[2px] h-[5px] w-px"
+                      style={{ backgroundColor: dna.mutedTextColor, opacity: 0.6 }}
+                    />
+                    <div
+                      className="absolute top-1/2 w-[7px] h-[7px] rounded-full"
                       style={{
-                        width: `${row.val}%`,
-                        backgroundImage: `linear-gradient(90deg, ${dna.primaryColor}, ${dna.foilColor}, ${dna.secondaryColor}, ${dna.primaryColor})`,
+                        left: `${row.val}%`,
+                        transform: 'translate(-50%, -50%)',
+                        backgroundColor: dna.primaryColor,
+                        boxShadow: `0 0 8px ${dna.primaryColor}`,
                       }}
                     />
                   </div>
                   <span
-                    className="w-12 text-right"
-                    style={{
-                      fontWeight: row.val >= 50 ? 700 : 400,
-                      color: row.val >= 50 ? dna.textColor : dna.mutedTextColor,
-                    }}
+                    className="w-11 text-right tabular-nums"
+                    style={{ color: dna.primaryColor, fontWeight: 700 }}
                   >
-                    {row.right}
+                    {Math.round(row.val >= 50 ? row.val : 100 - row.val)}%
                   </span>
                 </div>
               ))}
             </div>
 
-            {/* REFINED MINIMAL FOOTER WITH OPEN-SOURCE PAGES URL */}
+            {/* COLOPHON: open-source host + serial */}
             <div
               className="relative z-10 pt-1.5 border-t flex items-center justify-between text-[8.5px] font-mono tracking-wider px-0.5"
               style={{ borderColor: panelBorder, color: dna.mutedTextColor }}
             >
-              <span className="font-semibold" style={{ color: dna.primaryColor }}>
-                {dna.rarityLabel}
-              </span>
               <span className="opacity-85">{OPEN_SOURCE_DISPLAY_HOST}</span>
               <span>No.{dna.seed.toString(16).slice(0, 6).toUpperCase()}</span>
             </div>

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef } from 'react'
 import type { AxisScores } from '../../persona/axes'
 import type { AvatarVisualFeatures } from '../../providers/types'
 
@@ -979,12 +979,12 @@ export const ProceduralPatternCanvas: React.FC<{
     }
 
     // 2. Pre-generate Refined Bokeh & Pinpoint Stardust Motes
-    const moteCount = 18
+    const moteCount = 8
     const motes = Array.from({ length: moteCount }, (_, idx) => ({
       x: 24 + rng() * (W - 48),
       y: 24 + rng() * (H - 48),
-      r: idx < 4 ? 2.2 + rng() * 1.4 : 0.65 + rng() * 0.9, // 4 soft bokeh orbs + 14 crisp pinpoints
-      isBokeh: idx < 4,
+      r: idx < 2 ? 2.2 + rng() * 1.4 : 0.65 + rng() * 0.9, // 2 soft bokeh orbs + 6 crisp pinpoints
+      isBokeh: idx < 2,
       baseAlpha: dna.isLightTheme ? 0.14 + rng() * 0.18 : 0.18 + rng() * 0.32,
       vy: 0.12 + rng() * 0.22,
       ampX: 5 + rng() * 8,
@@ -1086,29 +1086,6 @@ function renderSigilGeometryByArchitecture(
       const teeth = dna.symmetryOrder * 2
       return (
         <g>
-          {/* Counter-Rotating Eccentric Off-Center Sub-Dial Rings */}
-          <g className="sigil-orbit-ccw-slow">
-            <circle
-              cx={cx - 8}
-              cy={cy - 6}
-              r={maxR * 0.72}
-              fill="none"
-              stroke={dna.secondaryColor}
-              strokeOpacity="0.52"
-              strokeWidth="1.15"
-              strokeDasharray="8 4 2 4"
-            />
-            <circle
-              cx={cx + 8}
-              cy={cy + 6}
-              r={maxR * 0.68}
-              fill="none"
-              stroke={dna.primaryColor}
-              strokeOpacity="0.52"
-              strokeWidth="1.15"
-              strokeDasharray="12 3 3 3"
-            />
-          </g>
           {/* Rotating Mechanical Gear Teeth Ring */}
           <g className="sigil-orbit-cw-med">
             {Array.from({ length: teeth }).map((_, i) => {
