@@ -46,124 +46,89 @@ import { XIcon } from './XIcon'
 import './HoloCard.css'
 
 /**
- * 20px Physical 3D Extruded Metallic Slab Core
- * Uses hollow metallic border rings (background: transparent) + 4 solid 20px perpendicular spines + 4 corner bridges.
- * Returned as a direct Fragment inside .card-3d-root so Chromium's preserve-3d compositor renders true 20px thickness at 90°/270° and never obscures the Front or Back faces.
+ * Physical card edge: a machined-metal slab 20px thick.
+ * - 21 hollow rounded rings give the curved corners their true extruded wall.
+ * - 4 flat spines cover the straight sides.
+ * Both share ONE thickness profile (dark outer bevel > bright chamfer > satin body > centre parting line)
+ * so rings and spines blend into a single continuous, clean metal edge (no text, no noise).
  */
 const CardSlabThickness: React.FC<{
   dna: GenerativeDNA;
   rotY: number;
   activeCode: string;
-}> = ({ dna, rotY, activeCode }) => {
-  // 21 hollow rim Z-slices spanning -9.2px to +9.2px
+}> = ({ dna, rotY }) => {
   const sliceCount = 21
+  const HI = '#eef2f8'
+  const GROOVE = '#0a0f1c'
+
+  const colorAt = (z: number) => {
+    const a = Math.abs(z)
+    if (a <= 1.0) return GROOVE
+    if (a >= 8.4) return dna.primaryColor
+    if (a >= 6.6) return HI
+    return dna.secondaryColor
+  }
+
   const slices = Array.from({ length: sliceCount }, (_, i) => {
     const z = -9.2 + (i / (sliceCount - 1)) * 18.4
-    const absZ = Math.abs(z)
-    const isOuterRim = absZ >= 6.8
-    const isCenterGroove = absZ <= 2.0
-    return { z, isOuterRim, isCenterGroove }
+    return { z, color: colorAt(z) }
   })
 
-  const specShift = Math.round(((Math.sin((rotY * Math.PI) / 180) + 1) / 2) * 100)
-
-  const spineGradient = `linear-gradient(90deg, 
-    ${dna.primaryColor} 0%, 
-    #f8fafc 16%, 
-    ${dna.secondaryColor} 32%, 
-    #090d16 44%, 
-    ${dna.tertiaryColor} 50%, 
-    #090d16 56%, 
-    ${dna.secondaryColor} 68%, 
-    #f8fafc 84%, 
+  // One thickness profile, expressed in % of the 20px edge (0% = back face, 100% = front face)
+  const profile = (dir: string) => `linear-gradient(${dir},
+    ${dna.primaryColor} 0%,
+    ${dna.primaryColor} 6%,
+    ${HI} 14%,
+    ${dna.secondaryColor} 26%,
+    ${dna.secondaryColor} 45%,
+    ${GROOVE} 49%,
+    ${GROOVE} 51%,
+    ${dna.secondaryColor} 55%,
+    ${dna.secondaryColor} 74%,
+    ${HI} 86%,
+    ${dna.primaryColor} 94%,
     ${dna.primaryColor} 100%)`
+
+  // Soft specular sheen that slides along the edge as the card turns
+  const specShift = Math.round(((Math.sin((rotY * Math.PI) / 180) + 1) / 2) * 100)
+  const sheen = `linear-gradient(90deg,
+    rgba(255,255,255,0) ${Math.max(specShift - 22, 0)}%,
+    rgba(255,255,255,0.38) ${specShift}%,
+    rgba(255,255,255,0) ${Math.min(specShift + 22, 100)}%)`
+  const sheenV = sheen.replace('90deg', '180deg')
 
   return (
     <>
-      {/* 21 Z-stacked hollow rounded-[30px] metallic rim rings (background is transparent so center is never blocked) */}
       {slices.map((s, idx) => (
         <div
           key={idx}
           className="card-slab-slice"
           style={{
             transform: `translateZ(${s.z.toFixed(2)}px)`,
-            borderWidth: s.isCenterGroove ? '4px' : '5px',
-            borderStyle: 'solid',
-            borderColor: s.isCenterGroove
-              ? '#090d16'
-              : s.isOuterRim
-              ? dna.primaryColor
-              : dna.secondaryColor,
-            boxShadow: s.isOuterRim
-              ? `0 0 2px ${dna.primaryColor}`
-              : undefined,
+            border: `5px solid ${s.color}`,
           }}
         />
       ))}
 
-      {/* Right 20px Solid Metallic Spine (faces camera dead-on at 270°) */}
+      {/* Left / right spines (thickness runs across their 20px width) */}
       <div
-        className="card-spine-right flex items-center justify-center rounded-sm"
-        style={{
-          background: spineGradient,
-          borderLeft: `1.5px solid ${dna.primaryColor}`,
-          borderRight: `1.5px solid ${dna.primaryColor}`,
-        }}
-      >
-        <span
-          className="font-mono text-[7px] font-black tracking-[0.22em] text-white whitespace-nowrap select-none"
-          style={{
-            writingMode: 'vertical-rl',
-            textShadow: '0 1px 2px rgba(0,0,0,0.95)',
-          }}
-        >
-          X·PERSONA // {activeCode} // DNA #{dna.seed.toString(16).slice(0, 6).toUpperCase()}
-        </span>
-      </div>
-
-      {/* Left 20px Solid Metallic Spine (faces camera dead-on at 90°) */}
-      <div
-        className="card-spine-left flex items-center justify-center rounded-sm"
-        style={{
-          background: spineGradient,
-          borderLeft: `1.5px solid ${dna.primaryColor}`,
-          borderRight: `1.5px solid ${dna.primaryColor}`,
-        }}
-      >
-        <span
-          className="font-mono text-[7px] font-black tracking-[0.22em] text-white whitespace-nowrap select-none"
-          style={{
-            writingMode: 'vertical-rl',
-            textShadow: '0 1px 2px rgba(0,0,0,0.95)',
-          }}
-        >
-          1-OF-1 FORGED SLAB // CHLADNI ({dna.chladniN.toFixed(1)},{dna.chladniM.toFixed(1)})
-        </span>
-      </div>
-
-      {/* Top & Bottom 20px Solid Metallic Spines */}
-      <div
-        className="card-spine-top rounded-sm"
-        style={{
-          background: `linear-gradient(${specShift}deg, ${dna.primaryColor} 0%, #f8fafc 22%, #090d16 50%, #f8fafc 78%, ${dna.secondaryColor} 100%)`,
-          borderTop: `1px solid ${dna.primaryColor}`,
-          borderBottom: `1px solid ${dna.primaryColor}`,
-        }}
+        className="card-spine-right"
+        style={{ background: `${sheenV}, ${profile('90deg')}` }}
       />
       <div
-        className="card-spine-bottom rounded-sm"
-        style={{
-          background: `linear-gradient(${specShift}deg, ${dna.primaryColor} 0%, #f8fafc 22%, #090d16 50%, #f8fafc 78%, ${dna.secondaryColor} 100%)`,
-          borderTop: `1px solid ${dna.primaryColor}`,
-          borderBottom: `1px solid ${dna.primaryColor}`,
-        }}
+        className="card-spine-left"
+        style={{ background: `${sheenV}, ${profile('90deg')}` }}
       />
 
-      {/* 4 Rounded Corner Bevel Bridge Plates */}
-      <div className="card-corner-tr rounded-sm" style={{ background: spineGradient }} />
-      <div className="card-corner-br rounded-sm" style={{ background: spineGradient }} />
-      <div className="card-corner-tl rounded-sm" style={{ background: spineGradient }} />
-      <div className="card-corner-bl rounded-sm" style={{ background: spineGradient }} />
+      {/* Top / bottom spines (thickness runs across their 20px height) */}
+      <div
+        className="card-spine-top"
+        style={{ background: `${sheen}, ${profile('180deg')}` }}
+      />
+      <div
+        className="card-spine-bottom"
+        style={{ background: `${sheen}, ${profile('180deg')}` }}
+      />
     </>
   )
 }
